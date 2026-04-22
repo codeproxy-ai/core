@@ -180,6 +180,67 @@ createResponsesFetch({
 });
 ```
 
+## Run as a local proxy
+
+If you don't want to embed the translator as a `fetch` wrapper (e.g. you're
+calling from a language that isn't JS, or from a tool whose HTTP client isn't
+pluggable), this package also ships a tiny local HTTP proxy that exposes the
+**OpenAI Responses API** on one port and forwards translated requests to the
+configured provider.
+
+Like the `fetch` wrapper, the proxy is **auth-agnostic**: credentials are
+never stored — callers must send `Authorization: Bearer <key>` (or the
+provider's native header) on every request.
+
+### CLI
+
+```bash
+npx responses-api-translator --provider claude
+# responses-api-translator listening on http://127.0.0.1:8787/v1/responses
+
+# Now point any Responses-API client at http://127.0.0.1:8787
+curl -N http://127.0.0.1:8787/v1/responses \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $ANTHROPIC_API_KEY" \
+  -d '{"model":"claude-sonnet-4-5","input":"Hello!","stream":true}'
+```
+
+Common flags:
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--provider <name>` | — | **Required.** `claude` or `anthropic`. |
+| `--host <host>` | `127.0.0.1` | Bind host. Use `0.0.0.0` for LAN. |
+| `-p, --port <port>` | `8787` | Bind port. `0` picks a random free port. |
+| `--base-url <url>` | provider default | Override upstream endpoint. |
+| `--api-version <ver>` | `2023-06-01` | Override `anthropic-version` header. |
+| `--no-cors` | CORS on | Disable the permissive CORS headers (browser dev only). |
+
+### Programmatic
+
+```ts
+import { startProxy } from 'responses-api-translator/server';
+
+const proxy = await startProxy({
+  provider: 'claude',
+  host: '127.0.0.1',
+  port: 8787,
+});
+console.log(`Listening on ${proxy.url}`);
+
+// …later
+await proxy.close();
+```
+
+`startProxy` accepts the same options as `createResponsesFetch`
+(`provider`, `baseUrl`, `apiVersion`, `defaultHeaders`, `fetch`,
+`translate`) plus `host`, `port`, `cors`, `logger`.
+
+The proxy only implements `POST /v1/responses`. Any other path returns `404`.
+It is designed for local dev / desktop apps; it does not authenticate,
+rate-limit, or persist anything.
+
+
 ## What gets translated
 
 ### Request (Responses → Anthropic)
