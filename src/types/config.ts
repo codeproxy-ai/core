@@ -9,6 +9,10 @@ import type { ProviderName } from '../fetch.js';
 export interface ProviderConfig {
   /** Provider name (claude, anthropic, zai) */
   provider: ProviderName;
+  /** Host to bind to (optional, defaults to 127.0.0.1) */
+  host?: string;
+  /** Port to listen on (optional, defaults to 8787) */
+  port?: string | number;
   /** Base URL for this provider (optional, uses default if not specified) */
   baseUrl?: string;
   /** API version header (for anthropic/claude) */
