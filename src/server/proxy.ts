@@ -71,11 +71,18 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       }),
     onCacheStats: (stats) => {
       const durationMs = requestInfo.startTime ? Date.now() - requestInfo.startTime : 0;
+      
+      // Calculate billed tokens (what you're actually charged for)
+      // Most providers charge for: input + output - cached
+      // Some providers also charge for cache_creation
+      const billedTokens = stats.inputTokens + stats.outputTokens - stats.cachedTokens;
+      
       const parts = [
         `total=${stats.totalTokens}`,
         `input=${stats.inputTokens}`,
         `output=${stats.outputTokens}`,
         `cached=${stats.cachedTokens}`,
+        `billed=${billedTokens}`,
       ];
       if (stats.cacheCreationTokens > 0) parts.push(`cache_creation=${stats.cacheCreationTokens}`);
       logger?.log(`${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${durationMs}ms) [${parts.join(', ')}]`);
