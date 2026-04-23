@@ -43,7 +43,7 @@ describe('createResponsesFetch', () => {
       );
     }) as unknown as typeof fetch;
 
-    const fetchImpl = createResponsesFetch({ provider: 'claude', fetch: upstream });
+    const fetchImpl = createResponsesFetch({ upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages', fetch: upstream });
 
     const res = await fetchImpl('https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -86,7 +86,7 @@ describe('createResponsesFetch', () => {
       );
     }) as unknown as typeof fetch;
 
-    const fetchImpl = createResponsesFetch({ provider: 'claude', fetch: upstream });
+    const fetchImpl = createResponsesFetch({ upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages', fetch: upstream });
     await fetchImpl('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { 'x-api-key': 'explicit-key' },
@@ -135,7 +135,7 @@ describe('createResponsesFetch', () => {
       { type: 'message_stop', data: { type: 'message_stop' } },
     ]);
 
-    const fetchImpl = createResponsesFetch({ provider: 'claude', fetch: upstream });
+    const fetchImpl = createResponsesFetch({ upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages', fetch: upstream });
 
     const res = await fetchImpl('https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -173,7 +173,7 @@ describe('createResponsesFetch', () => {
     }) as unknown as typeof fetch;
 
     const fetchImpl = createResponsesFetch({
-      provider: 'claude',
+      upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages',
       fetch: (async () => new Response('{}')) as unknown as typeof fetch,
       passthroughFetch: passthrough,
     });
@@ -194,7 +194,7 @@ describe('createResponsesFetch', () => {
       });
     }) as unknown as typeof fetch;
 
-    const fetchImpl = createResponsesFetch({ provider: 'claude', fetch: upstream });
+    const fetchImpl = createResponsesFetch({ upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages', fetch: upstream });
     const res = await fetchImpl('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { authorization: 'Bearer x' },

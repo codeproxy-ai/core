@@ -31,7 +31,7 @@ const ANTHROPIC_BUILTIN_TOOL_TYPES = new Set([
 export interface TranslateRequestOptions {
   /** Default max tokens when not provided (Anthropic requires `max_tokens`). */
   defaultMaxTokens?: number;
-  /** Thinking budget overrides, keyed by effort. Falls back to defaults. */
+  /** Thinking budget overrides, keyed by effort. */
   reasoningBudgets?: Partial<Record<'minimal' | 'low' | 'medium' | 'high', number>>;
 }
 
@@ -195,230 +195,139 @@ function buildMessages(data: ResponsesRequest, systemBlocks: AnthropicTextBlock[
     }
 
     if (itemType === 'reasoning') {
-      // Anthropic does not accept redriving thinking blocks without signature
-      // from a prior turn; drop them unless they already carry a signature.
+      flushPending();
       continue;
     }
 
-    flushPending();
-    if (itemType !== 'message' && itemType !== 'agentMessage') continue;
+    if (itemType === 'message' || itemType === 'agentMessage') {
+      flushPending();
+      let role = (item.role as string) || 'user';
+      if (role === 'developer') role = 'system';
 
-    let role = (item.role as string) || 'user';
-    if (role === 'model') role = 'assistant';
-    if (role === 'developer') role = 'system';
+      if (role === 'system') {
+        const text = extractMessageText(item);
+        if (text) systemBlocks.push({ type: 'text', text });
+        continue;
+      }
 
-    const { blocks, cache } = mapContentBlocks(item.content);
-    hasPromptCache = hasPromptCache || cache;
+      const contentBlocks: AnthropicContentBlock[] = [];
+      const rawContent = item.content;
+      if (typeof rawContent === 'string') {
+        contentBlocks.push({ type: 'text', text: rawContent });
+      } else if (Array.isArray(rawContent)) {
+        for (const part of rawContent) {
+          if (typeof part === 'string') {
+            contentBlocks.push({ type: 'text', text: part });
+          } else if (part && typeof part === 'object') {
+            const p = part as ResponsesContentPart;
+            if (p.type === 'input_text' || p.type === 'text' || p.type === 'output_text') {
+              contentBlocks.push({ type: 'text', text: String(p.text ?? '') });
+            } else if (p.type === 'input_image') {
+              contentBlocks.push({
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: (p as { mime_type?: string }).mime_type || 'image/png',
+                  data: String((p as { data?: string }).data ?? ''),
+                },
+              });
+            } else if (p.type === 'input_file') {
+              contentBlocks.push({
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: (p as { mime_type?: string }).mime_type || 'application/pdf',
+                  data: String((p as { data?: string }).data ?? ''),
+                },
+              });
+            }
+          }
+        }
+      }
 
-    if (role === 'system') {
-      for (const b of blocks) if (b.type === 'text') systemBlocks.push(b as AnthropicTextBlock);
-    } else if (role === 'user' || role === 'assistant') {
-      messages.push({ role, content: blocks });
+      if (role === 'assistant' || role === 'model') {
+        if (contentBlocks.length) {
+          messages.push({ role: 'assistant', content: contentBlocks });
+        }
+      } else {
+        if (contentBlocks.length) {
+          messages.push({ role: 'user', content: contentBlocks });
+        }
+      }
+      continue;
     }
   }
 
   flushPending();
 
-  if (!messages.length) {
-    messages.push({ role: 'user', content: [{ type: 'text', text: '...' }] });
+  for (const block of systemBlocks) {
+    if ((block as AnthropicTextBlock).cache_control) hasPromptCache = true;
   }
 
   return { messages, hasPromptCache };
 }
 
-interface ContentMapResult {
-  blocks: AnthropicContentBlock[];
-  cache: boolean;
-}
-
-function mapContentBlocks(content: unknown): ContentMapResult {
-  if (typeof content === 'string') {
-    return { blocks: [{ type: 'text', text: content }], cache: false };
-  }
-  if (!Array.isArray(content)) {
-    return { blocks: [{ type: 'text', text: String(content ?? '') }], cache: false };
-  }
-
-  let cache = false;
-  const blocks: AnthropicContentBlock[] = [];
-  for (const raw of content) {
-    if (typeof raw === 'string') {
-      blocks.push({ type: 'text', text: raw });
-      continue;
-    }
-    if (!raw || typeof raw !== 'object') continue;
-    const part = raw as ResponsesContentPart;
-    const ptype = part.type;
-    const cacheControl = part.cache_control;
-
-    if (ptype === 'input_text' || ptype === 'text' || ptype === 'output_text' || ptype === 'reasoning_text') {
-      const block: AnthropicTextBlock = { type: 'text', text: String(part.text ?? '') };
-      if (cacheControl) {
-        block.cache_control = cacheControl;
-        cache = true;
+function extractMessageText(item: Record<string, unknown>): string {
+  const rawContent = item.content;
+  if (typeof rawContent === 'string') return rawContent;
+  if (Array.isArray(rawContent)) {
+    let out = '';
+    for (const part of rawContent) {
+      if (typeof part === 'string') out += part;
+      else if (part && typeof part === 'object') {
+        out += String((part as { text?: string }).text ?? '');
       }
-      blocks.push(block);
-    } else if (ptype === 'input_image' || ptype === 'image' || ptype === 'image_url') {
-      const block = buildImageBlock(part);
-      if (block) {
-        if (cacheControl) {
-          block.cache_control = cacheControl;
-          cache = true;
-        }
-        blocks.push(block);
-      }
-    } else if (ptype === 'input_file' || ptype === 'file') {
-      const block = buildFileBlock(part);
-      if (block) {
-        if (cacheControl) {
-          block.cache_control = cacheControl;
-          cache = true;
-        }
-        blocks.push(block);
-      }
-    } else if (ptype === 'tool_result') {
-      const block: AnthropicToolResultBlock = {
-        type: 'tool_result',
-        tool_use_id: String(part.tool_use_id ?? part.call_id ?? ''),
-        content:
-          typeof part.content === 'string'
-            ? part.content
-            : ((part.content as AnthropicContentBlock[] | undefined) ?? ''),
-      };
-      if (cacheControl) {
-        block.cache_control = cacheControl;
-        cache = true;
-      }
-      blocks.push(block);
     }
+    return out;
   }
-
-  if (!blocks.length) blocks.push({ type: 'text', text: '' });
-  return { blocks, cache };
-}
-
-function buildImageBlock(part: ResponsesContentPart): AnthropicImageBlock | undefined {
-  const source = part.source;
-  if (source && typeof source === 'object' && (source as { type?: string }).type) {
-    return { type: 'image', source: { ...(source as unknown as AnthropicImageBlock["source"]) } };
-  }
-
-  let imageUrl: string | undefined;
-  const rawUrl = part.image_url;
-  if (typeof rawUrl === 'string') imageUrl = rawUrl;
-  else if (rawUrl && typeof rawUrl === 'object') imageUrl = (rawUrl as { url?: string }).url;
-
-  if (!imageUrl) {
-    const data = (part.data as string | undefined) || (part.base64 as string | undefined);
-    if (data) {
-      const mediaType = part.media_type || part.mime_type || 'image/png';
-      return {
-        type: 'image',
-        source: { type: 'base64', media_type: mediaType, data },
-      };
-    }
-    return undefined;
-  }
-
-  if (imageUrl.startsWith('data:')) {
-    const [header, b64] = imageUrl.split(',', 2);
-    if (b64 === undefined) return undefined;
-    let mediaType = 'image/png';
-    if (header?.startsWith('data:') && header.includes(';')) {
-      mediaType = header.slice(5).split(';', 1)[0] || 'image/png';
-    }
-    return {
-      type: 'image',
-      source: { type: 'base64', media_type: mediaType, data: b64 },
-    };
-  }
-
-  return { type: 'image', source: { type: 'url', url: imageUrl } };
-}
-
-function buildFileBlock(part: ResponsesContentPart): AnthropicDocumentBlock | undefined {
-  const source = part.source;
-  if (source && typeof source === 'object' && (source as { type?: string }).type) {
-    return { type: 'document', source: { ...(source as unknown as AnthropicDocumentBlock["source"]) } };
-  }
-
-  let fileData = (part.file_data as string | undefined) || (part.data as string | undefined);
-  if (typeof fileData === 'string' && fileData) {
-    let mediaType = part.media_type || part.mime_type || 'application/pdf';
-    if (fileData.startsWith('data:')) {
-      const [header, b64] = fileData.split(',', 2);
-      if (b64 === undefined) return undefined;
-      if (header?.startsWith('data:') && header.includes(';')) {
-        mediaType = header.slice(5).split(';', 1)[0] || mediaType;
-      }
-      fileData = b64;
-    }
-    return {
-      type: 'document',
-      source: { type: 'base64', media_type: mediaType, data: fileData },
-    };
-  }
-
-  let fileUrl: string | undefined;
-  const rawUrl = part.file_url;
-  if (typeof rawUrl === 'string') fileUrl = rawUrl;
-  else if (rawUrl && typeof rawUrl === 'object') fileUrl = (rawUrl as { url?: string }).url;
-  if (typeof fileUrl === 'string' && fileUrl) {
-    return { type: 'document', source: { type: 'url', url: fileUrl } };
-  }
-  return undefined;
-}
-
-function mapInputToolCall(item: Record<string, unknown>): AnthropicToolUseBlock | undefined {
-  let name = item.name as string | undefined;
-  const itype = item.type as string | undefined;
-  if (!name) {
-    if (itype === 'commandExecution') name = 'run_shell_command';
-    else if (itype === 'local_shell_call') name = 'local_shell_command';
-    else if (itype === 'fileChange') name = 'write_file';
-    else if (itype === 'web_search_call') name = 'web_search';
-  }
-  if (!name) return undefined;
-
-  let args: unknown = item.arguments ?? item.input ?? {};
-  if (itype === 'local_shell_call' && (!args || (typeof args === 'object' && !Object.keys(args as object).length))) {
-    const action = (item.action as Record<string, unknown> | undefined) ?? {};
-    const exec = (action.exec as Record<string, unknown> | undefined) ?? {};
-    args = {
-      command: exec.command ?? [],
-      working_directory: exec.working_directory,
-    };
-  }
-
-  if (typeof args === 'string') {
-    args = safeJsonParse(args) ?? { raw: args };
-  }
-  if (!args || typeof args !== 'object') args = { raw: String(args ?? '') };
-
-  const id = (item.call_id as string) || (item.id as string) || makeId('call');
-  return {
-    type: 'tool_use',
-    id,
-    name,
-    input: args as Record<string, unknown>,
-  };
+  return '';
 }
 
 function extractToolOutputText(item: Record<string, unknown>): string {
   const raw = item.output ?? item.content ?? item.stdout ?? '';
   if (typeof raw === 'string') return raw;
   if (Array.isArray(raw)) {
-    const parts: string[] = [];
-    for (const p of raw) {
-      if (typeof p === 'string') parts.push(p);
-      else if (p && typeof p === 'object') parts.push(String((p as { text?: string }).text ?? ''));
+    let out = '';
+    for (const part of raw) {
+      if (typeof part === 'string') out += part;
+      else if (part && typeof part === 'object') out += String((part as { text?: string }).text ?? '');
     }
-    return parts.join('');
+    return out;
   }
-  if (raw && typeof raw === 'object') {
-    return String((raw as { content?: string }).content ?? '');
+  if (raw && typeof raw === 'object') return String((raw as { content?: string }).content ?? '');
+  return '';
+}
+
+function mapInputToolCall(item: Record<string, unknown>): AnthropicToolUseBlock | undefined {
+  const callId = (item.call_id as string) || (item.id as string) || makeId('call');
+  let name = item.name as string | undefined;
+  const itemType = item.type as string | undefined;
+
+  if (!name) {
+    if (itemType === 'commandExecution') name = 'run_shell_command';
+    else if (itemType === 'local_shell_call') name = 'local_shell_command';
+    else if (itemType === 'fileChange') name = 'write_file';
+    else if (itemType === 'web_search_call') name = 'web_search';
   }
-  return String(raw ?? '');
+
+  if (!name) return undefined;
+
+  const input =
+    (item.arguments as Record<string, unknown>) ??
+    (item.input as Record<string, unknown>) ??
+    {};
+
+  const block: AnthropicToolUseBlock = {
+    type: 'tool_use',
+    id: callId,
+    name,
+    input: input as Record<string, unknown>,
+  };
+
+  const cache = (item as { cache_control?: Record<string, unknown> }).cache_control;
+  if (cache) block.cache_control = cache;
+
+  return block;
 }
 
 function mapTools(tools: ResponsesTool[]): (AnthropicTool | Record<string, unknown>)[] {

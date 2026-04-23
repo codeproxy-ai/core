@@ -10,11 +10,8 @@ import { jsonStringifySafe } from '../../utils/json.js';
 import { makeId } from '../../utils/id.js';
 
 export interface TranslateResponseOptions {
-  /** Id used for the resulting Responses object. Defaults to Anthropic id or generated. */
   responseId?: string;
-  /** Created timestamp (seconds). Defaults to `Date.now() / 1000`. */
   createdAt?: number;
-  /** Original Responses-API model that callers want surfaced. */
   model?: string;
 }
 
@@ -89,7 +86,6 @@ export function mapOutputItems(content: AnthropicContentBlock[]): ResponsesOutpu
       };
       out.push(reasoning);
     }
-    // `web_search_tool_use` / `web_search_result_block` resolved server-side; skip.
   }
 
   if (textChunks.length) {

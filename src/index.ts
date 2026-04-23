@@ -1,5 +1,12 @@
-export * as claude from './providers/claude/index.js';
-export * as zai from './providers/zai/index.js';
+export {
+  createResponsesFetch,
+  type CreateResponsesFetchOptions,
+  type UpstreamFormat,
+  type CacheStats,
+} from './fetch.js';
+
+export * as translate from './translate/index.js';
+
 export type {
   ResponsesRequest,
   ResponsesResponse,
@@ -14,6 +21,7 @@ export type {
   ResponsesInputItem,
   ResponsesContentPart,
 } from './types/responses.js';
+
 export type {
   AnthropicRequest,
   AnthropicResponse,
@@ -24,14 +32,18 @@ export type {
   AnthropicToolChoice,
   AnthropicUsage,
 } from './types/anthropic.js';
+
+export type {
+  OpenAiChatRequest,
+  OpenAiChatResponse,
+  OpenAiChatMessage,
+  OpenAiChatTool,
+  OpenAiChatToolCall,
+  OpenAiChatStreamChunk,
+} from './types/openai_chat.js';
+
 export {
   parseSseStream,
   encodeSseEvent,
   type SseMessage,
 } from './utils/sse.js';
-
-export {
-  createResponsesFetch,
-  type CreateResponsesFetchOptions,
-  type ProviderName,
-} from './fetch.js';

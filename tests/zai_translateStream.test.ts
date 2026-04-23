@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { translateStream } from '../src/providers/zai/translateStream.js';
+import { translateStream } from '../src/translate/openai/translateStream.js';
 import { encodeSseEvent } from '../src/utils/sse.js';
 import type { ResponsesStreamEvent } from '../src/types/responses.js';
 

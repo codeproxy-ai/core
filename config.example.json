@@ -1,9 +1,8 @@
 {
   "version": "1.0",
-  "currentProvider": "claude",
-  "providers": {
-    "claude": {
-      "provider": "claude",
+  "currentUpstream": "anthropic",
+  "upstreams": {
+    "anthropic": {
       "baseUrl": "https://api.anthropic.com/v1/messages",
       "apiKey": "",
       "model": "claude-sonnet-4-5",
@@ -11,10 +10,15 @@
       "headers": {}
     },
     "zai": {
-      "provider": "zai",
       "baseUrl": "https://api.z.ai/api/coding/paas/v4/chat/completions",
       "apiKey": "",
       "model": "glm-4.6",
+      "headers": {}
+    },
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1/chat/completions",
+      "apiKey": "",
+      "model": "gpt-4o-mini",
       "headers": {}
     }
   }

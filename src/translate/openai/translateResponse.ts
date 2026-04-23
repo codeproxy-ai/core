@@ -19,13 +19,13 @@ export interface TranslateResponseOptions {
 
 const SHELL_TOOL_NAMES = new Set(['shell', 'container.exec', 'shell_command']);
 
-/** Convert a non-streaming ZAI (OpenAI-chat) response into a Responses-API response. */
+/** Convert an OpenAI Chat response into a Responses-API response. */
 export function translateResponse(
   body: OpenAiChatResponse,
   options: TranslateResponseOptions = {},
 ): ResponsesResponse {
   const createdAt = options.createdAt ?? body.created ?? Math.floor(Date.now() / 1000);
-  const id = options.responseId ?? (body.id ? `zai_${body.id}` : makeId('resp'));
+  const id = options.responseId ?? body.id ?? makeId('resp');
   const model = options.model ?? body.model ?? '';
 
   const choice = body.choices?.[0];
@@ -40,14 +40,13 @@ export function translateResponse(
   }
 
   if (typeof message?.content === 'string' && message.content) {
-    const msgOut: ResponsesOutputMessage = {
+    output.push({
       id: makeId('msg'),
       type: 'message',
       role: 'assistant',
       status: 'completed',
       content: [{ type: 'output_text', text: message.content }],
-    };
-    output.push(msgOut);
+    });
   }
 
   const usage = body.usage ?? {};

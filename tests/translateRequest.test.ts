@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { translateRequest } from '../src/providers/claude/translateRequest.js';
+import { translateRequest } from '../src/translate/anthropic/translateRequest.js';
 
 describe('translateRequest (Responses -> Anthropic)', () => {
   it('maps simple string input + instructions', () => {
@@ -69,7 +69,7 @@ describe('translateRequest (Responses -> Anthropic)', () => {
           type: 'message',
           role: 'user',
           content: [
-            { type: 'input_image', image_url: 'data:image/jpeg;base64,AAA' },
+            { type: 'input_image', mime_type: 'image/jpeg', data: 'AAA' },
           ],
         },
       ],

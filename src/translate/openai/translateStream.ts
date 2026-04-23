@@ -29,8 +29,10 @@ export interface TranslateStreamOptions {
   requestMetadata?: ResponsesStreamMetadata;
 }
 
+const SHELL_TOOL_NAMES = new Set(['shell', 'container.exec', 'shell_command']);
+
 /**
- * Consume an OpenAI Chat SSE stream and yield Responses-API SSE events.
+ * Consume an OpenAI-chat-style SSE stream and yield Responses-API SSE events.
  */
 export async function* translateStream(
   stream: ReadableStream<Uint8Array>,
@@ -197,6 +199,11 @@ class StreamTranslator {
     for (const state of this.toolCalls.values()) {
       const item = state.item;
       item.status = 'completed';
+      if (item.name && SHELL_TOOL_NAMES.has(item.name)) {
+        item.type = 'local_shell_call';
+        const parsed = safeJsonParse<{ command?: string[] }>(item.arguments ?? '');
+        item.action = { type: 'exec', command: parsed?.command ?? [] };
+      }
       items.push({ index: state.outputIndex, item });
     }
 

@@ -31,7 +31,7 @@ describe('startProxy', () => {
   beforeAll(async () => {
     upstream = mockUpstream();
     proxy = await startProxy({
-      provider: 'claude',
+      upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages',
       host: '127.0.0.1',
       port: 0,
       fetch: upstream.fetch,

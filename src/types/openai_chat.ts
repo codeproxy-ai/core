@@ -1,5 +1,5 @@
 /**
- * OpenAI chat/completions API type definitions (subset used by the Z.AI provider).
+ * OpenAI chat/completions API type definitions (subset used by the openai-chat upstream format).
  * Only the fields needed for request/response/stream translation are typed.
  */
 

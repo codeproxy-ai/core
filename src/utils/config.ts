@@ -4,8 +4,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { ConfigFile, ProviderConfig } from '../types/config.js';
+import type { ConfigFile, UpstreamConfig } from '../types/config.js';
 
 const CONFIG_FILE_NAMES = [
   'responses-api-translator.config.json',
@@ -18,7 +17,6 @@ const CONFIG_FILE_NAMES = [
 
 /**
  * Find and load a config file.
- * Searches in the current directory and parent directories up to the project root.
  */
 export async function loadConfigFile(
   searchFrom: string = process.cwd(),
@@ -31,12 +29,9 @@ export async function loadConfigFile(
       const content = readFileSync(configPath, 'utf-8');
       return JSON.parse(content) as ConfigFile;
     } else if (configPath.endsWith('.js') || configPath.endsWith('.mjs')) {
-      // Dynamic import for JS/MJS config files
       const module = await import(`file://${configPath}`);
       return module.default as ConfigFile;
     } else if (configPath.endsWith('.ts')) {
-      // For TS files, we need to compile them first or use tsx
-      // For simplicity, we'll require tsx to be available
       const module = await import(`file://${configPath}`);
       return module.default as ConfigFile;
     }
@@ -47,9 +42,6 @@ export async function loadConfigFile(
   }
 }
 
-/**
- * Find the nearest config file by searching upward from the given directory.
- */
 function findConfigPath(searchFrom: string): string | null {
   let currentDir = searchFrom;
   const root = parseRoot(searchFrom);
@@ -67,9 +59,6 @@ function findConfigPath(searchFrom: string): string | null {
   return null;
 }
 
-/**
- * Parse the filesystem root from a given path.
- */
 function parseRoot(path: string): string {
   const parsed = resolve(path);
   const root = parsed.split(/[\\/]/)[0];
@@ -90,30 +79,29 @@ export function validateConfig(config: unknown): { valid: boolean; error?: strin
     return { valid: false, error: 'Config must have a version string' };
   }
 
-  if (typeof cfg.currentProvider !== 'string') {
-    return { valid: false, error: 'Config must have a currentProvider string' };
+  if (typeof cfg.currentUpstream !== 'string') {
+    return { valid: false, error: 'Config must have a currentUpstream string' };
   }
 
-  if (typeof cfg.providers !== 'object' || cfg.providers === null) {
-    return { valid: false, error: 'Config must have a providers object' };
+  if (typeof cfg.upstreams !== 'object' || cfg.upstreams === null) {
+    return { valid: false, error: 'Config must have an upstreams object' };
   }
 
-  const providers = cfg.providers as Record<string, unknown>;
+  const upstreams = cfg.upstreams as Record<string, unknown>;
 
-  if (!(cfg.currentProvider in providers)) {
+  if (!(cfg.currentUpstream in upstreams)) {
     return {
       valid: false,
-      error: `currentProvider "${cfg.currentProvider}" not found in providers`,
+      error: `currentUpstream "${cfg.currentUpstream}" not found in upstreams`,
     };
   }
 
-  // Validate each provider
-  for (const [name, provider] of Object.entries(providers)) {
-    const result = validateProviderConfig(provider);
+  for (const [name, upstream] of Object.entries(upstreams)) {
+    const result = validateUpstreamConfig(upstream);
     if (!result.valid) {
       return {
         valid: false,
-        error: `Provider "${name}" is invalid: ${result.error}`,
+        error: `Upstream "${name}" is invalid: ${result.error}`,
       };
     }
   }
@@ -121,34 +109,31 @@ export function validateConfig(config: unknown): { valid: boolean; error?: strin
   return { valid: true };
 }
 
-/**
- * Validate a single provider configuration.
- */
-export function validateProviderConfig(provider: unknown): {
+export function validateUpstreamConfig(upstream: unknown): {
   valid: boolean;
   error?: string;
 } {
-  if (typeof provider !== 'object' || provider === null) {
-    return { valid: false, error: 'Provider config must be an object' };
+  if (typeof upstream !== 'object' || upstream === null) {
+    return { valid: false, error: 'Upstream config must be an object' };
   }
 
-  const cfg = provider as Record<string, unknown>;
+  const cfg = upstream as Record<string, unknown>;
 
-  if (typeof cfg.provider !== 'string') {
-    return { valid: false, error: 'Provider must have a provider name (claude, anthropic, zai)' };
+  if (cfg.format !== undefined) {
+    if (typeof cfg.format !== 'string') {
+      return { valid: false, error: 'format must be a string if provided' };
+    }
+    const validFormats = ['anthropic', 'openai-chat'];
+    if (!validFormats.includes(cfg.format)) {
+      return {
+        valid: false,
+        error: `Invalid format: ${cfg.format}. Must be one of: ${validFormats.join(', ')}`,
+      };
+    }
   }
 
-  const validProviders = ['claude', 'anthropic', 'zai', 'openai'];
-  if (!validProviders.includes(cfg.provider)) {
-    return {
-      valid: false,
-      error: `Invalid provider name: ${cfg.provider}. Must be one of: ${validProviders.join(', ')}`,
-    };
-  }
-
-  // Optional fields validation
-  if (cfg.baseUrl !== undefined && typeof cfg.baseUrl !== 'string') {
-    return { valid: false, error: 'baseUrl must be a string if provided' };
+  if (typeof cfg.baseUrl !== 'string') {
+    return { valid: false, error: 'baseUrl is required and must be a string' };
   }
 
   if (cfg.apiVersion !== undefined && typeof cfg.apiVersion !== 'string') {
@@ -171,15 +156,13 @@ export function validateProviderConfig(provider: unknown): {
 }
 
 /**
- * Get the current provider config from a validated config file.
+ * Get the current upstream config from a validated config file.
  */
-export function getCurrentProviderConfig(config: ConfigFile): ProviderConfig | null {
-  const provider = config.providers[config.currentProvider];
-  if (!provider) {
-    return null;
-  }
-  return provider;
+export function getCurrentUpstreamConfig(config: ConfigFile): UpstreamConfig | null {
+  const upstream = config.upstreams[config.currentUpstream];
+  if (!upstream) return null;
+  return upstream;
 }
 
-// Re-export types for convenience
-export type { ConfigFile, ProviderConfig } from '../types/config.js';
+// Re-export types
+export type { ConfigFile, UpstreamConfig } from '../types/config.js';

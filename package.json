@@ -1,7 +1,7 @@
 {
   "name": "responses-api-translator",
-  "version": "0.1.0",
-  "description": "Translate between OpenAI Responses API and third-party AI providers (Claude, etc.) in pure TypeScript. Browser-compatible.",
+  "version": "0.2.0",
+  "description": "Translate between OpenAI Responses API and third-party AI upstreams (Anthropic, OpenAI Chat, etc.) in pure TypeScript. Browser-compatible.",
   "keywords": [
     "openai",
     "responses-api",
@@ -22,16 +22,6 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./claude": {
-      "types": "./dist/providers/claude/index.d.ts",
-      "import": "./dist/providers/claude/index.js",
-      "require": "./dist/providers/claude/index.cjs"
-    },
-    "./zai": {
-      "types": "./dist/providers/zai/index.d.ts",
-      "import": "./dist/providers/zai/index.js",
-      "require": "./dist/providers/zai/index.cjs"
-    },
     "./server": {
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js",
@@ -44,7 +34,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "tsx src/server/cli.ts --provider claude --port 8787",
+    "dev": "tsx src/server/cli.ts --upstream-format anthropic --base-url https://api.anthropic.com/v1/messages --port 8787",
+    "dev:openai": "tsx src/server/cli.ts --upstream-format openai-chat --base-url https://api.openai.com/v1/chat/completions --port 8787",
     "dev:config": "tsx src/server/cli.ts --config config.json",
     "build": "tsup && npx esbuild src/server/cli.ts --bundle --platform=node --outfile=dist/server/cli.js --format=esm --banner:js=\"#!/usr/bin/env node\"",
     "typecheck": "tsc --noEmit",

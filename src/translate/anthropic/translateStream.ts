@@ -15,13 +15,9 @@ import { safeJsonParse, jsonStringifySafe } from '../../utils/json.js';
 import { makeId } from '../../utils/id.js';
 
 export interface TranslateStreamOptions {
-  /** Model name to surface in events. */
   model?: string;
-  /** Response id. Defaults to a generated `resp_...` id. */
   responseId?: string;
-  /** Created timestamp in seconds. */
   createdAt?: number;
-  /** Extra metadata attached to `response.created` (tools, tool_choice, etc.). */
   requestMetadata?: ResponsesStreamMetadata;
 }
 
@@ -36,8 +32,6 @@ export interface ResponsesStreamMetadata {
 
 /**
  * Consume an Anthropic SSE stream and yield Responses-API SSE events.
- *
- * Works with any byte `ReadableStream<Uint8Array>` (e.g. `fetch(...).body`).
  */
 export async function* translateStream(
   stream: ReadableStream<Uint8Array>,
@@ -54,8 +48,7 @@ export async function* translateStream(
 }
 
 /**
- * Consume an async iterable of parsed Anthropic events (useful for tests and
- * when the caller already parsed SSE manually) and yield Responses events.
+ * Consume an async iterable of parsed Anthropic events and yield Responses events.
  */
 export async function* translateAnthropicEvents(
   events: AsyncIterable<AnthropicStreamEvent> | Iterable<AnthropicStreamEvent>,
@@ -77,7 +70,7 @@ function parseAnthropicEvent(msg: SseMessage): AnthropicStreamEvent | undefined 
 }
 
 interface BlockState {
-  type: 'text' | 'tool_use' | 'thinking' | 'web_search_tool_use' | string;
+  type: 'text' | 'tool_use' | 'thinking' | string;
   outputIndex: number;
   item?: ResponsesOutputItem;
   buffer: string;
@@ -237,10 +230,7 @@ class StreamTranslator {
     event: Extract<AnthropicStreamEvent, { type: 'content_block_start' }>,
   ): Generator<ResponsesStreamEvent, void, void> {
     const index = event.index;
-    const block = event.content_block as AnthropicContentBlock & {
-      id?: string;
-      name?: string;
-    };
+    const block = event.content_block as AnthropicContentBlock & { id?: string; name?: string };
     const btype = block.type;
 
     if (btype === 'thinking') {
@@ -302,7 +292,6 @@ class StreamTranslator {
       return;
     }
 
-    // Built-in blocks that resolve server-side.
     this.blocks.set(index, { type: btype, outputIndex: -1, buffer: '' });
   }
 
@@ -387,7 +376,5 @@ class StreamTranslator {
   }
 }
 
-// Mark unused helper as used for future inspection; currently kept for
-// documentation purposes and unused-field suppression on some tsconfigs.
+// Suppress unused export warning
 export type __AnthropicContentBlockAlias = AnthropicContentBlock;
-void jsonStringifySafe;

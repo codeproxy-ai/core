@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { translateResponse } from '../src/providers/claude/translateResponse.js';
+import { translateResponse } from '../src/translate/anthropic/translateResponse.js';
 
 describe('translateResponse (Anthropic -> Responses)', () => {
   it('maps text + tool_use into output items', () => {

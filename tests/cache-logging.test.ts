@@ -25,7 +25,7 @@ describe('cache logging', () => {
     };
 
     const fetch = createResponsesFetch({
-      provider: 'claude',
+      upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages',
       fetch: mockFetch,
       onCacheStats: (stats) => {
         capturedStats = stats;
@@ -74,7 +74,7 @@ describe('cache logging', () => {
     };
 
     const fetch = createResponsesFetch({
-      provider: 'claude',
+      upstreamFormat: 'anthropic' , baseUrl: 'https://api.anthropic.com/v1/messages',
       fetch: mockFetch,
       onCacheStats: (stats) => {
         capturedStats = stats;

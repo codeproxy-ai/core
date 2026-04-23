@@ -1,11 +1,6 @@
 /**
  * Local HTTP proxy that exposes the Responses API and forwards translated
- * requests to the chosen provider.  Built on top of `createResponsesFetch`
- * so the server and the in-process fetch wrapper share the exact same
- * translation logic.
- *
- * Runs on Node 18+ (uses the built-in `node:http` server and global
- * `fetch` / `ReadableStream`).  Not intended to run in the browser.
+ * requests to the configured upstream API format.
  */
 
 import http, { type IncomingMessage, type Server, type ServerResponse } from 'node:http';
@@ -31,34 +26,21 @@ export interface StartProxyOptions extends Omit<CreateResponsesFetchOptions, 'pa
 }
 
 export interface RunningProxy {
-  /** The bound host. */
   host: string;
-  /** The port the server is listening on (resolved when `port: 0`). */
   port: number;
-  /** Human-friendly URL. */
   url: string;
-  /** Underlying Node `http.Server`. */
   server: Server;
-  /** Close the server. */
   close: () => Promise<void>;
 }
 
-/**
- * Start a local HTTP proxy.  Clients can POST to `http://<host>:<port>/v1/responses`
- * with OpenAI Responses API payloads and the proxy will translate to the
- * configured provider.  Any other path returns 404.
- */
 export async function startProxy(options: StartProxyOptions): Promise<RunningProxy> {
   const host = options.host ?? '127.0.0.1';
   const port = options.port ?? 8787;
   const cors = options.cors ?? true;
   const logger = options.logger === null ? null : (options.logger ?? console);
 
-  // Track request info for logging
   const requestInfo = { method: '', url: '', startTime: 0 };
 
-  // Capture the most recent upstream exchange so we can persist it when the
-  // upstream returns a non-2xx status.
   const upstreamCapture: {
     request?: { url: string; method: string; headers: Record<string, string>; body: unknown };
     response?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
@@ -96,14 +78,12 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
   };
 
   const apiFetch = createResponsesFetch({
-    provider: options.provider,
+    upstreamFormat: options.upstreamFormat,
     baseUrl: options.baseUrl,
     apiVersion: options.apiVersion,
     model: options.model,
     defaultHeaders: options.defaultHeaders,
     fetch: capturingFetch,
-    translate: options.translate,
-    // Non-/responses traffic: return 404 instead of proxying through.
     passthroughFetch: async () =>
       new Response(JSON.stringify({ error: { message: 'Not found' } }), {
         status: 404,
@@ -111,12 +91,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       }),
     onCacheStats: (stats) => {
       const durationMs = requestInfo.startTime ? Date.now() - requestInfo.startTime : 0;
-      
-      // Calculate billed tokens (what you're actually charged for)
-      // Most providers charge for: input + output - cached
-      // Some providers also charge for cache_creation
       const billedTokens = stats.inputTokens + stats.outputTokens - stats.cachedTokens;
-      
       const parts = [
         `total=${stats.totalTokens}`,
         `input=${stats.inputTokens}`,
@@ -140,64 +115,62 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
 
   const server = http.createServer(async (req, res) => {
     const start = Date.now();
+    requestInfo.method = req.method ?? 'POST';
+    requestInfo.url = req.url ?? '/v1/responses';
+    requestInfo.startTime = start;
+
     try {
-      // Track request info for logging
-      requestInfo.method = req.method ?? '';
-      requestInfo.url = req.url ?? '';
-      requestInfo.startTime = start;
-
-      // Reset upstream capture for this request
-      upstreamCapture.request = undefined;
-      upstreamCapture.response = undefined;
-
-      await handleRequest(req, res, apiFetch, {
+      await handleRequest(req, res, {
+        apiFetch,
         cors,
         logger,
-        method: req.method ?? 'GET',
+        method: req.method ?? 'POST',
         url: req.url ?? '/',
         upstreamCapture,
       });
     } catch (err) {
-      logger?.error('proxy request failed', err);
-      if (!res.headersSent) {
-        res.writeHead(500, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: { message: (err as Error).message } }));
-      } else {
-        res.end();
+      logger?.error('[proxy-error]', err);
+      try {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: { message: 'Internal server error' } }));
+        }
+      } catch {
+        // ignore
       }
     }
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
+  return new Promise((resolve, reject) => {
     server.listen(port, host, () => {
-      server.off('error', reject);
-      resolve();
+      const actualPort = (server.address() as { port: number }).port;
+      const url = `http://${host}:${actualPort}`;
+      logger?.log(`Proxy listening on ${url}`);
+      logger?.log(`Upstream format: ${options.upstreamFormat}`);
+      logger?.log(`Upstream URL: ${options.baseUrl}`);
+      resolve({
+        host,
+        port: actualPort,
+        url,
+        server,
+        close: () =>
+          new Promise((res) => {
+            server.close((err) => {
+              if (err) logger?.warn('Error closing server:', err);
+              res();
+            });
+          }),
+      });
     });
+    server.once('error', reject);
   });
-
-  const address = server.address();
-  const boundPort = typeof address === 'object' && address ? address.port : port;
-  const url = `http://${host}:${boundPort}`;
-  logger?.log(`responses-api-translator listening on ${url}/v1/responses`);
-
-  return {
-    host,
-    port: boundPort,
-    url,
-    server,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
-      }),
-  };
 }
 
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  apiFetch: typeof fetch,
   opts: {
+    apiFetch: typeof fetch;
     cors: boolean;
     logger: Pick<Console, 'log' | 'warn' | 'error'> | null;
     method: string;
@@ -225,7 +198,6 @@ async function handleRequest(
     body = await readIncomingBody(req);
   }
 
-  // We only implement `/v1/responses`.  Everything else -> 404.
   if (!/^\/v1\/responses\/?(?:\?|$)/.test(urlPath)) {
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: { message: `Not found: ${method} ${urlPath}` } }));
@@ -233,7 +205,7 @@ async function handleRequest(
   }
 
   const requestBodyText = body ? body.toString('utf8') : undefined;
-  const response = await apiFetch(`http://local${urlPath}`, {
+  const response = await opts.apiFetch(`http://local${urlPath}`, {
     method,
     headers,
     body: body ? new Uint8Array(body) : undefined,
@@ -373,7 +345,6 @@ function saveErrorDump(dump: {
     timestamp: new Date().toISOString(),
     ...dump,
   };
-  // Redact common auth headers from the saved dump.
   redactAuth(payload.clientRequest?.headers);
   redactAuth(payload.upstreamRequest?.headers);
   writeFileSync(filePath, JSON.stringify(payload, null, 2));

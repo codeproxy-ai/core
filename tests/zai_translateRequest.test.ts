@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { translateRequest } from '../src/providers/zai/translateRequest.js';
+import { translateRequest } from '../src/translate/openai/translateRequest.js';
 
 describe('translateRequest (Responses -> Zai)', () => {
   it('maps simple string input + instructions', () => {
@@ -63,7 +63,7 @@ describe('translateRequest (Responses -> Zai)', () => {
       (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length,
     );
     expect(assistant).toBeDefined();
-    expect(assistant!.reasoning_content).toBe('');
+    expect(assistant!.reasoning_content).toBe('.');
   });
 
   it('preserves existing reasoning_content on assistant tool-call messages', () => {

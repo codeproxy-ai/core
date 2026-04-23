@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { translateResponse } from '../src/providers/zai/translateResponse.js';
+import { translateResponse } from '../src/translate/openai/translateResponse.js';
 
 describe('translateResponse (Zai -> Responses)', () => {
   it('maps text + tool_calls into output items', () => {

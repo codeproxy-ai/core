@@ -12,8 +12,3 @@ export {
   type TranslateStreamOptions,
   type ResponsesStreamMetadata,
 } from './translateStream.js';
-export {
-  ZaiResponsesClient,
-  ZaiRequestError,
-  type ZaiClientOptions,
-} from './client.js';

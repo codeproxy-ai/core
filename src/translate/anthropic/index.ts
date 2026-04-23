@@ -14,8 +14,3 @@ export {
   type TranslateStreamOptions,
   type ResponsesStreamMetadata,
 } from './translateStream.js';
-export {
-  ClaudeResponsesClient,
-  ClaudeRequestError,
-  type ClaudeClientOptions,
-} from './client.js';

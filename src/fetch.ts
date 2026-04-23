@@ -1,68 +1,53 @@
 /**
- * Drop-in `fetch` wrapper that makes any Responses-API client talk to a
- * third-party provider (e.g. Anthropic Claude) instead of the OpenAI API.
+ * Drop-in `fetch` wrapper that translates OpenAI Responses API traffic
+ * to a third-party upstream API format (Anthropic Messages or OpenAI Chat).
  *
  * This wrapper is **auth-agnostic**: it does not know or manage your API key.
  * You supply headers on the outbound call just like you would for the OpenAI
  * Responses API (e.g. `Authorization: Bearer <key>`), and the wrapper forwards
- * them to the upstream provider. For providers that use a different header
- * name (Anthropic's `x-api-key`), `Authorization: Bearer X` is rewritten to
- * `x-api-key: X` automatically.  Callers that already send the provider's
- * native header are untouched.
+ * them upstream. Format-specific header rewrites (e.g. Anthropic's `x-api-key`)
+ * are applied automatically.
  */
 
-import {
-  translateRequest as claudeTranslateRequest,
-  type TranslateRequestOptions,
-} from './providers/claude/translateRequest.js';
-import { translateResponse as claudeTranslateResponse } from './providers/claude/translateResponse.js';
-import { translateStream as claudeTranslateStream } from './providers/claude/translateStream.js';
-import { translateRequest as zaiTranslateRequest } from './providers/zai/translateRequest.js';
-import { translateResponse as zaiTranslateResponse } from './providers/zai/translateResponse.js';
-import { translateStream as zaiTranslateStream } from './providers/zai/translateStream.js';
-import { translateRequest as openaiTranslateRequest } from './providers/openai/translateRequest.js';
-import { translateResponse as openaiTranslateResponse } from './providers/openai/translateResponse.js';
-import { translateStream as openaiTranslateStream } from './providers/openai/translateStream.js';
+import * as anthropic from './translate/anthropic/index.js';
+import * as openai from './translate/openai/index.js';
 import { encodeSseEvent } from './utils/sse.js';
-import type { ResponsesRequest, ResponsesStreamEvent } from './types/responses.js';
+import type { ResponsesRequest, ResponsesStreamEvent, ResponsesResponse } from './types/responses.js';
 import type { AnthropicRequest, AnthropicResponse } from './types/anthropic.js';
 import type { OpenAiChatResponse } from './types/openai_chat.js';
 
-export type ProviderName = 'claude' | 'anthropic' | 'zai' | 'openai';
+/** Supported upstream API formats. */
+export type UpstreamFormat = 'anthropic' | 'openai-chat';
 
 export interface CacheStats {
-  /** Number of tokens read from cache. */
   cachedTokens: number;
-  /** Number of tokens used to create cache. */
   cacheCreationTokens: number;
-  /** Total input tokens. */
   inputTokens: number;
-  /** Total output tokens. */
   outputTokens: number;
-  /** Total tokens (input + output). */
   totalTokens: number;
 }
 
-
 export interface CreateResponsesFetchOptions {
-  /** Provider to route `/responses` calls to. */
-  provider: ProviderName;
-  /** Override the upstream endpoint. Defaults to the provider's public URL. */
-  baseUrl?: string;
+  /**
+   * Upstream API format to translate to.
+   * - `'anthropic'` → Anthropic Messages API
+   * - `'openai-chat'` → OpenAI-compatible Chat Completions API
+   *
+   * If omitted, inferred from `baseUrl`:
+   * - path ends with `/messages` or host matches `anthropic` → `anthropic`
+   * - path ends with `/chat/completions` → `openai-chat`
+   */
+  upstreamFormat?: UpstreamFormat;
+  /** Upstream endpoint URL. Required — no default. */
+  baseUrl: string;
   /** Override the upstream API version header (Anthropic only). */
   apiVersion?: string;
-  /**
-   * Replace the caller-provided `model` field before translation.
-   * Useful when the client hard-codes an OpenAI model id but the upstream
-   * provider needs its own (e.g. forcing `glm-4.6` regardless of input).
-   */
+  /** Replace the caller-provided `model` field before translation. */
   model?: string;
   /** Extra headers merged into every upstream call. */
   defaultHeaders?: Record<string, string>;
   /** Underlying fetch used to issue upstream requests. Defaults to `globalThis.fetch`. */
   fetch?: typeof fetch;
-  /** Options passed to {@link translateRequest}. */
-  translate?: TranslateRequestOptions;
   /**
    * If the caller hits a non-`/responses` endpoint, forward to this fetch.
    * Defaults to `options.fetch` or `globalThis.fetch`.
@@ -72,16 +57,9 @@ export interface CreateResponsesFetchOptions {
   onCacheStats?: (stats: CacheStats) => void;
 }
 
-const DEFAULT_URLS: Record<ProviderName, string> = {
-  claude: 'https://api.anthropic.com/v1/messages',
-  anthropic: 'https://api.anthropic.com/v1/messages',
-  zai: 'https://api.z.ai/api/coding/paas/v4/chat/completions',
-  openai: 'https://api.openai.com/v1/chat/completions',
-};
-
 /**
  * Build a `fetch`-compatible function whose only job is to translate
- * OpenAI-Responses-API traffic to the selected provider's wire format.
+ * OpenAI-Responses-API traffic to the selected upstream format.
  *
  * - Matches any `POST` to a URL whose pathname ends in `/v1/responses`.
  * - Non-matching URLs pass through to `passthroughFetch` unchanged.
@@ -89,8 +67,19 @@ const DEFAULT_URLS: Record<ProviderName, string> = {
 export function createResponsesFetch(
   options: CreateResponsesFetchOptions,
 ): typeof fetch {
-  if (!isSupportedProvider(options.provider)) {
-    throw new Error(`Unsupported provider: ${String(options.provider)}`);
+  if (!options.baseUrl) {
+    throw new Error('baseUrl is required');
+  }
+
+  const format = options.upstreamFormat
+    ? normalizeFormat(options.upstreamFormat)
+    : inferFormatFromUrl(options.baseUrl);
+  if (!format) {
+    throw new Error(
+      options.upstreamFormat
+        ? `Unsupported upstream format: ${String(options.upstreamFormat)}. Use 'anthropic' or 'openai-chat'`
+        : `Could not infer upstreamFormat from baseUrl: ${options.baseUrl}. Pass upstreamFormat explicitly ('anthropic' or 'openai-chat').`,
+    );
   }
 
   const baseFetch = options.fetch ?? globalThis.fetch;
@@ -120,14 +109,37 @@ export function createResponsesFetch(
 
     if (options.model) parsed.model = options.model;
 
-    return handleResponses(parsed, options, baseFetch, headers, signal);
+    return handleResponses(parsed, format, options, baseFetch, headers, signal);
   };
 
   return wrapped;
 }
 
-function isSupportedProvider(name: string): boolean {
-  return name === 'claude' || name === 'anthropic' || name === 'zai' || name === 'openai';
+function normalizeFormat(value: string): UpstreamFormat | null {
+  return value === 'anthropic' || value === 'openai-chat' ? value : null;
+}
+
+function inferFormatFromUrl(baseUrl: string): UpstreamFormat | null {
+  let u: URL;
+  try {
+    u = new URL(baseUrl);
+  } catch {
+    return null;
+  }
+  const path = u.pathname.replace(/\/+$/, '');
+  const host = u.hostname.toLowerCase();
+  if (/\/messages$/.test(path) || host.includes('anthropic')) return 'anthropic';
+  if (/\/chat\/completions$/.test(path)) return 'openai-chat';
+  return null;
+}
+
+function isResponsesEndpoint(url: string): boolean {
+  try {
+    const u = new URL(url, 'http://_internal_');
+    return /\/v1\/responses\/?$/.test(u.pathname);
+  } catch {
+    return /\/v1\/responses(?:\?|$)/.test(url);
+  }
 }
 
 function urlOf(input: RequestInfo | URL): string {
@@ -137,196 +149,113 @@ function urlOf(input: RequestInfo | URL): string {
   return String(input);
 }
 
-function isResponsesEndpoint(url: string): boolean {
-  try {
-    const u = new URL(url, 'http://_internal_');
-    return /\/v1\/responses\/?$/.test(u.pathname);
-  } catch {
-    return /\/v1\/responses\/?(?:\?|$)/.test(url);
-  }
-}
-
-interface ExtractedRequest {
-  method: string;
-  body: string | undefined;
-  signal: AbortSignal | undefined;
-  headers: Record<string, string>;
-}
-
 async function extractRequest(
   input: RequestInfo | URL,
-  init: RequestInit | undefined,
-): Promise<ExtractedRequest> {
-  const headers: Record<string, string> = {};
-  const absorb = (h: HeadersInit | undefined) => {
-    if (!h) return;
-    if (typeof Headers !== 'undefined' && h instanceof Headers) {
-      h.forEach((value, key) => {
-        headers[key.toLowerCase()] = value;
-      });
-      return;
-    }
-    if (Array.isArray(h)) {
-      for (const [k, v] of h) headers[String(k).toLowerCase()] = String(v);
-      return;
-    }
-    for (const [k, v] of Object.entries(h)) headers[k.toLowerCase()] = String(v);
-  };
-
-  if (typeof Request !== 'undefined' && input instanceof Request && !init?.body) {
-    absorb(input.headers);
-    absorb(init?.headers);
-    const method = (init?.method ?? input.method ?? 'GET').toUpperCase();
-    const body =
-      method === 'GET' || method === 'HEAD' ? undefined : await input.clone().text();
+  init?: RequestInit,
+): Promise<{
+  body: string | undefined;
+  signal: AbortSignal | undefined;
+  method: string;
+  headers: Record<string, string>;
+}> {
+  if (typeof Request !== 'undefined' && input instanceof Request) {
+    const text = await input.clone().text();
+    const headers: Record<string, string> = {};
+    input.headers.forEach((v, k) => {
+      headers[k.toLowerCase()] = v;
+    });
     return {
-      method,
-      body,
-      signal: init?.signal ?? input.signal ?? undefined,
+      body: text || undefined,
+      signal: input.signal,
+      method: input.method,
       headers,
     };
   }
 
-  absorb(init?.headers);
-  const method = (init?.method ?? 'GET').toUpperCase();
-  let body: string | undefined;
-  if (init?.body != null) {
-    if (typeof init.body === 'string') body = init.body;
-    else if (init.body instanceof ArrayBuffer) body = new TextDecoder().decode(init.body);
-    else if (ArrayBuffer.isView(init.body)) body = new TextDecoder().decode(init.body as Uint8Array);
-    else if (typeof (init.body as Blob).text === 'function') body = await (init.body as Blob).text();
-    else if (typeof (init.body as URLSearchParams).toString === 'function') body = (init.body as URLSearchParams).toString();
-    else body = String(init.body);
+  const url = urlOf(input);
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const body =
+    init?.body != null
+      ? typeof init.body === 'string'
+        ? init.body
+        : await readBody(init.body)
+      : undefined;
+
+  const headers: Record<string, string> = {};
+  if (init?.headers) {
+    if (typeof Headers !== 'undefined' && init.headers instanceof Headers) {
+      init.headers.forEach((v, k) => {
+        headers[k.toLowerCase()] = v;
+      });
+    } else if (Array.isArray(init.headers)) {
+      for (const [k, v] of init.headers) headers[k.toLowerCase()] = v;
+    } else {
+      for (const [k, v] of Object.entries(init.headers)) headers[k.toLowerCase()] = String(v);
+    }
   }
-  return { method, body, signal: init?.signal ?? undefined, headers };
+
+  return { body, signal: init?.signal, method, headers };
 }
 
-
-/**
- * Wrap streaming events to collect cache statistics and call callback on completion.
- */
-async function* collectCacheStatsFromStream(
-  events: AsyncGenerator<import('./types/responses.js').ResponsesStreamEvent, void, void>,
-  onCacheStats: ((stats: CacheStats) => void) | undefined,
-): AsyncGenerator<import('./types/responses.js').ResponsesStreamEvent, void, void> {
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let cachedTokens = 0;
-  let cacheCreationTokens = 0;
-
-  try {
-    for await (const event of events) {
-      // Collect usage information from response.completed event
-      if (event && event.type === 'response.completed') {
-        const response = event.response as { usage?: { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number; cache_creation_tokens?: number } } };
-        if (response.usage) {
-          inputTokens = response.usage.input_tokens ?? 0;
-          outputTokens = response.usage.output_tokens ?? 0;
-          if (response.usage.input_tokens_details) {
-            cachedTokens = response.usage.input_tokens_details.cached_tokens ?? 0;
-            cacheCreationTokens = response.usage.input_tokens_details.cache_creation_tokens ?? 0;
-          }
-        }
-      }
-      yield event;
-    }
-  } finally {
-    // Call the callback when the stream completes
-    if (onCacheStats) {
-      onCacheStats({
-        cachedTokens,
-        cacheCreationTokens,
-        inputTokens,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
-      });
-    }
+async function readBody(body: BodyInit): Promise<string> {
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array || body instanceof ArrayBuffer) {
+    return new TextDecoder().decode(body);
   }
+  if (typeof Blob !== 'undefined' && body instanceof Blob) {
+    return body.text();
+  }
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    return '[FormData]';
+  }
+  if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
+    return body.toString();
+  }
+  return String(body);
 }
 
 async function handleResponses(
   request: ResponsesRequest,
+  format: UpstreamFormat,
   options: CreateResponsesFetchOptions,
   baseFetch: typeof fetch,
   incomingHeaders: Record<string, string>,
   signal: AbortSignal | undefined,
 ): Promise<Response> {
-  const streaming = request.stream === true;
+  const streaming = request.stream ?? false;
 
-  const upstreamUrl = options.baseUrl ?? DEFAULT_URLS[options.provider];
-  const headers = buildUpstreamHeaders(options, incomingHeaders);
+  const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, options);
+  const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
 
-  const upstreamBody = buildUpstreamBody(request, options, streaming);
-
-  let upstream: Response;
-  try {
-    upstream = await baseFetch(upstreamUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(upstreamBody.body),
-      signal,
-    });
-  } catch (err) {
-    return jsonErrorResponse(502, `Upstream fetch failed: ${(err as Error).message}`);
-  }
+  const upstream = await baseFetch(options.baseUrl, {
+    method: 'POST',
+    headers: upstreamHeaders,
+    body: JSON.stringify(upstreamBody),
+    signal,
+  });
 
   if (!upstream.ok) {
     const text = await upstream.text().catch(() => '');
-    return new Response(buildOpenAIErrorJson(upstream.status, text), {
+    return new Response(text, {
       status: upstream.status,
       headers: { 'content-type': 'application/json' },
     });
   }
 
   if (!streaming) {
-    if (options.provider === 'zai' || options.provider === 'openai') {
-      let body: OpenAiChatResponse;
-      try {
-        body = (await upstream.json()) as OpenAiChatResponse;
-      } catch (err) {
-        return jsonErrorResponse(502, `Failed to parse upstream JSON: ${(err as Error).message}`);
-      }
-      const translated =
-        options.provider === 'openai'
-          ? openaiTranslateResponse(body, { model: request.model })
-          : zaiTranslateResponse(body, { model: request.model });
-      if (options.onCacheStats) {
-        const usage = (body as { usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } }).usage ?? {};
-        const inputTokens = usage.prompt_tokens ?? 0;
-        const outputTokens = usage.completion_tokens ?? 0;
-        options.onCacheStats({
-          cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
-          cacheCreationTokens: 0,
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-        });
-      }
-      return new Response(JSON.stringify(translated), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
+    const body = (await upstream.json()) as AnthropicResponse | OpenAiChatResponse;
+    const translated =
+      format === 'anthropic'
+        ? anthropic.translateResponse(body as AnthropicResponse, {
+            model: request.model,
+          })
+        : openai.translateResponse(body as OpenAiChatResponse, {
+            model: request.model,
+          });
 
-    let body: AnthropicResponse;
-    try {
-      body = (await upstream.json()) as AnthropicResponse;
-    } catch (err) {
-      return jsonErrorResponse(502, `Failed to parse upstream JSON: ${(err as Error).message}`);
-    }
-    const translated = claudeTranslateResponse(body, { model: request.model });
-    if (options.onCacheStats) {
-      const usage = (body.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) ?? {};
-      const inputTokens = usage.input_tokens ?? 0;
-      const outputTokens = usage.output_tokens ?? 0;
-      options.onCacheStats({
-        cachedTokens: usage.cache_read_input_tokens ?? 0,
-        cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
-        inputTokens,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
-      });
-    }
+    const cacheStats = extractCacheStatsFromResponse(translated);
+    options.onCacheStats?.(cacheStats);
+
     return new Response(JSON.stringify(translated), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -338,40 +267,14 @@ async function handleResponses(
   }
 
   const events =
-    options.provider === 'zai'
-      ? zaiTranslateStream(upstream.body, {
+    format === 'anthropic'
+      ? anthropic.translateStream(upstream.body, {
           model: request.model,
-          requestMetadata: {
-            temperature: upstreamBody.temperature,
-            top_p: upstreamBody.top_p,
-            tools: (request.tools as unknown[]) ?? [],
-            tool_choice: request.tool_choice,
-            store: request.store ?? true,
-            metadata: (request.metadata as Record<string, unknown>) ?? {},
-          },
+          requestMetadata,
         })
-      : options.provider === 'openai'
-        ? openaiTranslateStream(upstream.body, {
-            model: request.model,
-            requestMetadata: {
-              temperature: upstreamBody.temperature,
-              top_p: upstreamBody.top_p,
-              tools: (request.tools as unknown[]) ?? [],
-              tool_choice: request.tool_choice,
-              store: request.store ?? true,
-              metadata: (request.metadata as Record<string, unknown>) ?? {},
-            },
-          })
-        : claudeTranslateStream(upstream.body, {
+      : openai.translateStream(upstream.body, {
           model: request.model,
-          requestMetadata: {
-            temperature: upstreamBody.temperature,
-            top_p: upstreamBody.top_p,
-            tools: (request.tools as unknown[]) ?? [],
-            tool_choice: request.tool_choice,
-            store: request.store ?? true,
-            metadata: (request.metadata as Record<string, unknown>) ?? {},
-          },
+          requestMetadata,
         });
 
   const wrappedEvents = collectCacheStatsFromStream(events, options.onCacheStats);
@@ -387,42 +290,56 @@ async function handleResponses(
   });
 }
 
-interface UpstreamBody {
-  body: unknown;
-  temperature: number | undefined;
-  top_p: number | undefined;
+interface UpstreamBodyResult {
+  upstreamBody: unknown;
+  requestMetadata: {
+    temperature: number | undefined;
+    top_p: number | undefined;
+    tools: unknown[];
+    tool_choice: unknown;
+    store: boolean;
+    metadata: Record<string, unknown>;
+  };
 }
 
 function buildUpstreamBody(
   request: ResponsesRequest,
-  options: CreateResponsesFetchOptions,
-  streaming: boolean,
-): UpstreamBody {
-  if (options.provider === 'zai') {
-    const { request: zaiRequest } = zaiTranslateRequest(request, options.translate);
-    zaiRequest.stream = streaming;
-    return { body: zaiRequest, temperature: zaiRequest.temperature, top_p: zaiRequest.top_p };
+  format: UpstreamFormat,
+  _options: CreateResponsesFetchOptions,
+): UpstreamBodyResult {
+  if (format === 'anthropic') {
+    const { request: anthropicRequest } = anthropic.translateRequest(request);
+    anthropicRequest.stream = request.stream ?? true;
+    return {
+      upstreamBody: anthropicRequest,
+      requestMetadata: {
+        temperature: anthropicRequest.temperature,
+        top_p: anthropicRequest.top_p,
+        tools: (request.tools as unknown[]) ?? [],
+        tool_choice: request.tool_choice,
+        store: request.store ?? true,
+        metadata: (request.metadata as Record<string, unknown>) ?? {},
+      },
+    };
   }
-  if (options.provider === 'openai') {
-    const { request: oaiRequest } = openaiTranslateRequest(request, options.translate);
-    oaiRequest.stream = streaming;
-    return { body: oaiRequest, temperature: oaiRequest.temperature, top_p: oaiRequest.top_p };
-  }
-  const { request: anthropicRequest } = claudeTranslateRequest(request, options.translate);
-  anthropicRequest.stream = streaming;
+
+  const { request: chatRequest } = openai.translateRequest(request);
+  chatRequest.stream = request.stream ?? true;
   return {
-    body: anthropicRequest,
-    temperature: anthropicRequest.temperature,
-    top_p: anthropicRequest.top_p,
+    upstreamBody: chatRequest,
+    requestMetadata: {
+      temperature: chatRequest.temperature,
+      top_p: chatRequest.top_p,
+      tools: (request.tools as unknown[]) ?? [],
+      tool_choice: request.tool_choice,
+      store: request.store ?? true,
+      metadata: (request.metadata as Record<string, unknown>) ?? {},
+    },
   };
 }
 
-/**
- * Forward caller-supplied headers to the upstream provider.  Strips hop-by-hop
- * or OpenAI-only metadata, rewrites `Authorization: Bearer X` into the
- * provider's native auth header when appropriate, and merges `defaultHeaders`.
- */
 function buildUpstreamHeaders(
+  format: UpstreamFormat,
   options: CreateResponsesFetchOptions,
   incoming: Record<string, string>,
 ): Record<string, string> {
@@ -433,9 +350,6 @@ function buildUpstreamHeaders(
     out[key] = value;
   }
 
-  // Apply defaultHeaders BEFORE provider-specific auth conversion so that
-  // overrides (e.g. `--apikey`, which arrives as `authorization: Bearer X`)
-  // also feed into the Anthropic `x-api-key` rewrite below.
   if (options.defaultHeaders) {
     for (const [key, value] of Object.entries(options.defaultHeaders)) {
       out[key.toLowerCase()] = value;
@@ -444,7 +358,7 @@ function buildUpstreamHeaders(
 
   out['content-type'] = 'application/json';
 
-  if (options.provider === 'claude' || options.provider === 'anthropic') {
+  if (format === 'anthropic') {
     if (!out['anthropic-version']) {
       out['anthropic-version'] = options.apiVersion ?? '2023-06-01';
     }
@@ -468,12 +382,13 @@ const DROPPED_REQUEST_HEADERS = new Set([
 ]);
 
 function isClientSpecificHeader(key: string): boolean {
-  if (key.startsWith('openai-')) return true;
-  if (key.startsWith('x-stainless')) return true;
-  if (key.startsWith('x-codex-')) return true;
-  if (key === 'originator') return true;
-  if (key === 'session_id') return true;
-  if (key === 'x-client-request-id') return true;
+  const k = key.toLowerCase();
+  if (k.startsWith('openai-')) return true;
+  if (k.startsWith('x-stainless')) return true;
+  if (k.startsWith('x-codex-')) return true;
+  if (k === 'originator') return true;
+  if (k === 'session_id') return true;
+  if (k === 'x-client-request-id') return true;
   return false;
 }
 
@@ -516,6 +431,38 @@ function buildOpenAIErrorJson(status: number, message: string): string {
   return JSON.stringify({
     error: { message, type: 'upstream_error', code: String(status) },
   });
+}
+
+function extractCacheStatsFromResponse(response: ResponsesResponse): CacheStats {
+  const u = response.usage;
+  return {
+    cachedTokens: u?.input_tokens_details?.cached_tokens ?? 0,
+    cacheCreationTokens: u?.input_tokens_details?.cache_creation_tokens ?? 0,
+    inputTokens: u?.input_tokens ?? 0,
+    outputTokens: u?.output_tokens ?? 0,
+    totalTokens: u?.total_tokens ?? 0,
+  };
+}
+
+async function* collectCacheStatsFromStream(
+  events: AsyncGenerator<ResponsesStreamEvent, void, void>,
+  onCacheStats?: (stats: CacheStats) => void,
+): AsyncGenerator<ResponsesStreamEvent, void, void> {
+  let lastStats: CacheStats | undefined;
+  for await (const event of events) {
+    if (
+      event.type === 'response.completed' &&
+      (event as unknown as { response?: ResponsesResponse }).response?.usage
+    ) {
+      lastStats = extractCacheStatsFromResponse(
+        (event as unknown as { response: ResponsesResponse }).response,
+      );
+    }
+    yield event;
+  }
+  if (lastStats && onCacheStats) {
+    onCacheStats(lastStats);
+  }
 }
 
 export type { AnthropicRequest };

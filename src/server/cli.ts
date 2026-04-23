@@ -2,18 +2,17 @@
  * `responses-api-translator` CLI.
  *
  * Usage:
- *   npx responses-api-translator --provider claude
- *   npx responses-api-translator --config responses-api-translator.config.json
- *   npx responses-api-translator --provider claude --port 9000 --host 0.0.0.0
+ *   npx responses-api-translator --upstream-format anthropic --base-url https://api.anthropic.com/v1/messages
+ *   npx responses-api-translator --config config.json
  */
 
 import { readFileSync, existsSync } from 'node:fs';
 import { startProxy, type StartProxyOptions } from './proxy.js';
-import type { ProviderName } from '../fetch.js';
-import { validateConfig, getCurrentProviderConfig, type ConfigFile } from '../utils/config.js';
+import type { UpstreamFormat } from '../fetch.js';
+import { validateConfig, getCurrentUpstreamConfig, type ConfigFile } from '../utils/config.js';
 
 interface CliArgs {
-  provider?: ProviderName;
+  upstreamFormat?: UpstreamFormat | string;
   config?: string;
   host?: string;
   port?: number;
@@ -42,14 +41,17 @@ function parseArgs(argv: string[]): CliArgs {
       case '--host':
         out.host = take();
         break;
-      case '--provider':
-        out.provider = take() as ProviderName;
+      case '--upstream-format':
+        out.upstreamFormat = take();
+        break;
+      case '--base-url':
+        out.baseUrl = take();
         break;
       case '--config':
         out.config = take();
         break;
-      case '--base-url':
-        out.baseUrl = take();
+      case '--api-version':
+        out.apiVersion = take();
         break;
       case '--apikey':
         out.apikey = take();
@@ -61,7 +63,7 @@ function parseArgs(argv: string[]): CliArgs {
         out.cors = false;
         break;
       default:
-        if (arg.startsWith('--provider=')) out.provider = arg.slice('--provider='.length) as ProviderName;
+        if (arg.startsWith('--upstream-format=')) out.upstreamFormat = arg.slice('--upstream-format='.length);
         else if (arg.startsWith('--port=')) out.port = Number(arg.slice('--port='.length));
         else if (arg.startsWith('--host=')) out.host = arg.slice('--host='.length);
         else if (arg.startsWith('--base-url=')) out.baseUrl = arg.slice('--base-url='.length);
@@ -82,64 +84,61 @@ function printHelp(): void {
   console.log(`responses-api-translator - local Responses API proxy
 
 Usage:
-  responses-api-translator --provider <name> [options]
+  responses-api-translator --base-url <url> [options]
   responses-api-translator --config <file> [options]
 
 Options:
-  --provider <name>       Provider to use (claude, anthropic, zai, openai)
-  --config <file>         Use a config file instead of --provider
-  --host <host>           Bind host (default: 127.0.0.1)
-  -p, --port <port>       Bind port (default: 8787; 0 = random)
-  --base-url <url>        Override provider upstream URL
-  --api-version <ver>     Override anthropic-version header (anthropic only)
-  --apikey <key>          Override upstream Authorization: Bearer <key>
-  --model <name>          Override the model field in incoming requests
-  --no-cors               Disable CORS headers
-  -h, --help              Show help
+  --base-url <url>         Upstream endpoint URL (required when not using --config)
+  --upstream-format <fmt>  Upstream API format: anthropic | openai-chat
+                           (optional; inferred from --base-url when omitted:
+                            */messages or *anthropic* → anthropic,
+                            */chat/completions → openai-chat)
+  --config <file>          Use a config file instead of CLI flags
+  --host <host>            Bind host (default: 127.0.0.1)
+  -p, --port <port>        Bind port (default: 8787; 0 = random)
+  --api-version <ver>      Override anthropic-version header (anthropic only)
+  --apikey <key>           Override upstream Authorization: Bearer <key>
+  --model <name>           Override the model field in incoming requests
+  --no-cors                Disable CORS headers
+  -h, --help               Show help
 
 Config File Mode:
-  When using --config, the provider is loaded from the config file.
+  When using --config, upstream settings are loaded from the config file.
   Command-line options can override config values.
-  
+
   Config file format (JSON):
   {
     "version": "1.0",
-    "currentProvider": "my-claude",
-    "providers": {
+    "currentUpstream": "my-claude",
+    "upstreams": {
       "my-claude": {
-        "provider": "claude",
         "baseUrl": "https://api.anthropic.com/v1/messages",
         "apiKey": "your-api-key",
         "model": "claude-sonnet-4-5"
       },
-      "my-zai": {
-        "provider": "zai",
-        "baseUrl": "https://api.z.ai/api/coding/paas/v4/chat/completions",
-        "apiKey": "your-zai-key"
-      },
       "my-openai": {
-        "provider": "openai",
         "baseUrl": "https://api.openai.com/v1/chat/completions",
         "apiKey": "your-openai-key"
       }
     }
   }
 
-Auth is caller-driven: send Authorization: Bearer <key> (or the provider's
+  "format" is optional; inferred from baseUrl when omitted.
+
+Auth is caller-driven: send Authorization: Bearer <key> (or the upstream's
 native header) when calling the proxy. Nothing is stored server-side.
 
 Examples:
-  responses-api-translator --provider claude
+  responses-api-translator --upstream-format anthropic --base-url https://api.anthropic.com/v1/messages
+  responses-api-translator --upstream-format openai-chat --base-url https://api.openai.com/v1/chat/completions
   responses-api-translator --config my-config.json
-  responses-api-translator --provider zai --apikey <zai-key>
-  responses-api-translator --provider claude --host 0.0.0.0 --port 9000
+  responses-api-translator --upstream-format anthropic --base-url https://api.anthropic.com/v1/messages --apikey <key>
 `);
 }
 
 async function loadConfigFile(configPath: string): Promise<ConfigFile> {
   if (!existsSync(configPath)) {
     console.error(`Config file not found: ${configPath}`);
-    console.error('Run with --help for more information.');
     process.exit(1);
   }
 
@@ -164,33 +163,31 @@ async function loadConfigAndApplyOverrides(
     process.exit(1);
   }
 
-  const providerConfig = getCurrentProviderConfig(config);
-  if (!providerConfig) {
-    console.error(`Current provider "${config.currentProvider}" not found in config`);
+  const upstreamConfig = getCurrentUpstreamConfig(config);
+  if (!upstreamConfig) {
+    console.error(`Current upstream "${config.currentUpstream}" not found in config`);
     process.exit(1);
   }
 
   console.log(`Loaded config from: ${configPath}`);
-  console.log(`Current provider: ${config.currentProvider} (${providerConfig.provider})`);
+  console.log(`Current upstream: ${config.currentUpstream}${upstreamConfig.format ? ` (${upstreamConfig.format})` : ''}`);
 
-  // Build options from config, with CLI overrides
   const options: StartProxyOptions = {
-    provider: providerConfig.provider as ProviderName,
-    baseUrl: overrides.baseUrl || providerConfig.baseUrl,
-    apiVersion: overrides.apiVersion || providerConfig.apiVersion,
-    model: overrides.model || providerConfig.model,
-    host: overrides.host || providerConfig.host,
-    port: overrides.port !== undefined ? overrides.port : (providerConfig.port ? Number(providerConfig.port) : undefined),
+    upstreamFormat: upstreamConfig.format,
+    baseUrl: overrides.baseUrl || upstreamConfig.baseUrl,
+    apiVersion: overrides.apiVersion || upstreamConfig.apiVersion,
+    model: overrides.model || upstreamConfig.model,
+    host: overrides.host || upstreamConfig.host,
+    port: overrides.port !== undefined ? overrides.port : (upstreamConfig.port ? Number(upstreamConfig.port) : undefined),
     cors: overrides.cors,
   };
 
-  // Merge headers from config and CLI
   const defaultHeaders: Record<string, string> = {};
-  if (providerConfig.headers) {
-    Object.assign(defaultHeaders, providerConfig.headers);
+  if (upstreamConfig.headers) {
+    Object.assign(defaultHeaders, upstreamConfig.headers);
   }
-  if (providerConfig.apiKey) {
-    defaultHeaders.authorization = `Bearer ${providerConfig.apiKey}`;
+  if (upstreamConfig.apiKey) {
+    defaultHeaders.authorization = `Bearer ${upstreamConfig.apiKey}`;
   }
   if (overrides.apikey) {
     defaultHeaders.authorization = `Bearer ${overrides.apikey}`;
@@ -205,7 +202,7 @@ async function loadConfigAndApplyOverrides(
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  
+
   if (args.help) {
     printHelp();
     process.exit(0);
@@ -214,23 +211,20 @@ async function main(): Promise<void> {
   let options: StartProxyOptions;
 
   if (args.config) {
-    // Config file mode
     options = await loadConfigAndApplyOverrides(args.config, args);
-  } else if (args.provider) {
-    // Direct provider mode
+  } else if (args.baseUrl) {
     options = {
-      provider: args.provider!,
+      upstreamFormat: args.upstreamFormat as UpstreamFormat | undefined,
+      baseUrl: args.baseUrl,
       host: args.host,
       port: args.port,
-      baseUrl: args.baseUrl,
       apiVersion: args.apiVersion,
       model: args.model,
       defaultHeaders: args.apikey ? { authorization: `Bearer ${args.apikey}` } : undefined,
       cors: args.cors,
     };
   } else {
-    // No provider or config specified
-    console.error('Error: --provider or --config is required');
+    console.error('Error: Either --config <file> or --base-url <url> is required');
     console.error('');
     printHelp();
     process.exit(1);
@@ -238,7 +232,7 @@ async function main(): Promise<void> {
 
   const proxy = await startProxy(options);
   const shutdown = async (signal: string) => {
-    console.log(`\nReceived ${signal}, shutting down…`);
+    console.log(`\nReceived ${signal}, shutting down...`);
     try {
       await proxy.close();
     } finally {
