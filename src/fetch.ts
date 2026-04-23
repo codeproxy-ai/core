@@ -279,14 +279,17 @@ async function handleResponses(
   }
 
   if (!streaming) {
-    if (options.provider === 'zai') {
+    if (options.provider === 'zai' || options.provider === 'openai') {
       let body: OpenAiChatResponse;
       try {
         body = (await upstream.json()) as OpenAiChatResponse;
       } catch (err) {
         return jsonErrorResponse(502, `Failed to parse upstream JSON: ${(err as Error).message}`);
       }
-      const translated = zaiTranslateResponse(body, { model: request.model });
+      const translated =
+        options.provider === 'openai'
+          ? openaiTranslateResponse(body, { model: request.model })
+          : zaiTranslateResponse(body, { model: request.model });
       if (options.onCacheStats) {
         const usage = (body as { usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } }).usage ?? {};
         const inputTokens = usage.prompt_tokens ?? 0;
@@ -347,7 +350,19 @@ async function handleResponses(
             metadata: (request.metadata as Record<string, unknown>) ?? {},
           },
         })
-      : claudeTranslateStream(upstream.body, {
+      : options.provider === 'openai'
+        ? openaiTranslateStream(upstream.body, {
+            model: request.model,
+            requestMetadata: {
+              temperature: upstreamBody.temperature,
+              top_p: upstreamBody.top_p,
+              tools: (request.tools as unknown[]) ?? [],
+              tool_choice: request.tool_choice,
+              store: request.store ?? true,
+              metadata: (request.metadata as Record<string, unknown>) ?? {},
+            },
+          })
+        : claudeTranslateStream(upstream.body, {
           model: request.model,
           requestMetadata: {
             temperature: upstreamBody.temperature,
@@ -387,6 +402,11 @@ function buildUpstreamBody(
     const { request: zaiRequest } = zaiTranslateRequest(request, options.translate);
     zaiRequest.stream = streaming;
     return { body: zaiRequest, temperature: zaiRequest.temperature, top_p: zaiRequest.top_p };
+  }
+  if (options.provider === 'openai') {
+    const { request: oaiRequest } = openaiTranslateRequest(request, options.translate);
+    oaiRequest.stream = streaming;
+    return { body: oaiRequest, temperature: oaiRequest.temperature, top_p: oaiRequest.top_p };
   }
   const { request: anthropicRequest } = claudeTranslateRequest(request, options.translate);
   anthropicRequest.stream = streaming;

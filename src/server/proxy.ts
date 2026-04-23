@@ -10,6 +10,8 @@
 
 import http, { type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
   createResponsesFetch,
   type CreateResponsesFetchOptions,
@@ -55,13 +57,51 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
   // Track request info for logging
   const requestInfo = { method: '', url: '', startTime: 0 };
 
+  // Capture the most recent upstream exchange so we can persist it when the
+  // upstream returns a non-2xx status.
+  const upstreamCapture: {
+    request?: { url: string; method: string; headers: Record<string, string>; body: unknown };
+    response?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
+  } = {};
+
+  const baseFetch = options.fetch ?? globalThis.fetch;
+  const capturingFetch: typeof fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+    const method = (init?.method ?? (input as Request)?.method ?? 'GET').toUpperCase();
+    const reqHeaders = headersInitToObject(init?.headers);
+    let reqBody: unknown = undefined;
+    if (init?.body != null) {
+      if (typeof init.body === 'string') reqBody = tryParseJson(init.body);
+      else if (init.body instanceof ArrayBuffer) reqBody = tryParseJson(new TextDecoder().decode(init.body));
+      else if (ArrayBuffer.isView(init.body)) reqBody = tryParseJson(new TextDecoder().decode(init.body as Uint8Array));
+      else reqBody = String(init.body);
+    }
+    upstreamCapture.request = { url, method, headers: reqHeaders, body: reqBody };
+
+    const resp = await baseFetch(input as RequestInfo, init);
+
+    if (!resp.ok) {
+      const clone = resp.clone();
+      const text = await clone.text().catch(() => '');
+      upstreamCapture.response = {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: headersToObject(resp.headers),
+        body: tryParseJson(text),
+      };
+    } else {
+      upstreamCapture.response = undefined;
+    }
+    return resp;
+  };
+
   const apiFetch = createResponsesFetch({
     provider: options.provider,
     baseUrl: options.baseUrl,
     apiVersion: options.apiVersion,
     model: options.model,
     defaultHeaders: options.defaultHeaders,
-    fetch: options.fetch,
+    fetch: capturingFetch,
     translate: options.translate,
     // Non-/responses traffic: return 404 instead of proxying through.
     passthroughFetch: async () =>
@@ -106,7 +146,17 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       requestInfo.url = req.url ?? '';
       requestInfo.startTime = start;
 
-      await handleRequest(req, res, apiFetch, { cors, logger, method: req.method ?? 'GET', url: req.url ?? '/' });
+      // Reset upstream capture for this request
+      upstreamCapture.request = undefined;
+      upstreamCapture.response = undefined;
+
+      await handleRequest(req, res, apiFetch, {
+        cors,
+        logger,
+        method: req.method ?? 'GET',
+        url: req.url ?? '/',
+        upstreamCapture,
+      });
     } catch (err) {
       logger?.error('proxy request failed', err);
       if (!res.headersSent) {
@@ -152,6 +202,10 @@ async function handleRequest(
     logger: Pick<Console, 'log' | 'warn' | 'error'> | null;
     method: string;
     url: string;
+    upstreamCapture: {
+      request?: { url: string; method: string; headers: Record<string, string>; body: unknown };
+      response?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
+    };
   },
 ): Promise<void> {
   if (opts.cors) setCorsHeaders(res);
@@ -190,6 +244,26 @@ async function handleRequest(
     opts.logger?.error(
       `[proxy-failure] request=${JSON.stringify({ method: opts.method, url: opts.url, headers, body: requestBodyText })} response=${JSON.stringify({ status: response.status, headers: headersToObject(response.headers), body: responseBodyText })}`,
     );
+    try {
+      const filePath = saveErrorDump({
+        method: opts.method,
+        url: opts.url,
+        clientRequest: {
+          headers,
+          body: tryParseJson(requestBodyText ?? ''),
+        },
+        upstreamRequest: opts.upstreamCapture.request,
+        upstreamResponse: opts.upstreamCapture.response,
+        proxyResponse: {
+          status: response.status,
+          headers: headersToObject(response.headers),
+          body: tryParseJson(responseBodyText),
+        },
+      });
+      opts.logger?.error(`[proxy-failure] full exchange saved to ${filePath}`);
+    } catch (dumpErr) {
+      opts.logger?.error('[proxy-failure] failed to persist error dump', dumpErr);
+    }
   }
 
   const outHeaders: Record<string, string> = {};
@@ -253,4 +327,65 @@ function corsHeaders(): Record<string, string> {
       'authorization,content-type,x-api-key,anthropic-version,anthropic-beta,anthropic-dangerous-direct-browser-access',
     'access-control-expose-headers': 'content-type',
   };
+}
+
+function tryParseJson(s: string | undefined | null): unknown {
+  if (!s) return s ?? null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
+}
+
+function headersInitToObject(h: HeadersInit | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!h) return out;
+  if (typeof Headers !== 'undefined' && h instanceof Headers) {
+    h.forEach((v, k) => {
+      out[k.toLowerCase()] = v;
+    });
+    return out;
+  }
+  if (Array.isArray(h)) {
+    for (const [k, v] of h) out[String(k).toLowerCase()] = String(v);
+    return out;
+  }
+  for (const [k, v] of Object.entries(h)) out[k.toLowerCase()] = String(v);
+  return out;
+}
+
+function saveErrorDump(dump: {
+  method: string;
+  url: string;
+  clientRequest: { headers: Record<string, string>; body: unknown };
+  upstreamRequest?: { url: string; method: string; headers: Record<string, string>; body: unknown };
+  upstreamResponse?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
+  proxyResponse: { status: number; headers: Record<string, string>; body: unknown };
+}): string {
+  const dir = resolve(process.cwd(), 'logs');
+  mkdirSync(dir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const status = dump.upstreamResponse?.status ?? dump.proxyResponse.status;
+  const filename = `proxy-error-${ts}-${status}.json`;
+  const filePath = join(dir, filename);
+  const payload = {
+    timestamp: new Date().toISOString(),
+    ...dump,
+  };
+  // Redact common auth headers from the saved dump.
+  redactAuth(payload.clientRequest?.headers);
+  redactAuth(payload.upstreamRequest?.headers);
+  writeFileSync(filePath, JSON.stringify(payload, null, 2));
+  return filePath;
+}
+
+function redactAuth(headers: Record<string, string> | undefined): void {
+  if (!headers) return;
+  for (const key of Object.keys(headers)) {
+    const k = key.toLowerCase();
+    if (k === 'authorization' || k === 'x-api-key' || k === 'api-key' || k === 'cookie') {
+      headers[key] = '[REDACTED]';
+    }
+  }
 }
