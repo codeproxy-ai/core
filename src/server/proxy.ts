@@ -52,6 +52,9 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
   const cors = options.cors ?? true;
   const logger = options.logger === null ? null : (options.logger ?? console);
 
+  // Track request info for logging
+  const requestInfo = { method: '', url: '', startTime: 0 };
+
   const apiFetch = createResponsesFetch({
     provider: options.provider,
     baseUrl: options.baseUrl,
@@ -67,17 +70,23 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         headers: { 'content-type': 'application/json' },
       }),
     onCacheStats: (stats) => {
-      // Log cache information and total tokens
-      const cacheInfo = [];
-      if (stats.cachedTokens > 0) cacheInfo.push(`${stats.cachedTokens} cached`);
-      if (stats.cacheCreationTokens > 0) cacheInfo.push(`${stats.cacheCreationTokens} cache creation`);
-      const cacheStr = cacheInfo.length > 0 ? ` [Cache: ${cacheInfo.join(', ')}]` : '';
-      const extraInfo = options.onCacheStats ? { method: '', url: '', durationMs: 0 } : {};
-      logger?.log(`${extraInfo.method || 'POST'} ${extraInfo.url || '/v1/responses'} -> 200 (${extraInfo.durationMs || 0}ms)${cacheStr} [Total: ${stats.totalTokens} tokens]`);
-      
-      // Call user callback if provided
+      const durationMs = requestInfo.startTime ? Date.now() - requestInfo.startTime : 0;
+      const parts = [
+        `total=${stats.totalTokens}`,
+        `input=${stats.inputTokens}`,
+        `output=${stats.outputTokens}`,
+        `cached=${stats.cachedTokens}`,
+      ];
+      if (stats.cacheCreationTokens > 0) parts.push(`cache_creation=${stats.cacheCreationTokens}`);
+      logger?.log(`${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${durationMs}ms) [${parts.join(', ')}]`);
+
       if (options.onCacheStats) {
-        options.onCacheStats(stats);
+        options.onCacheStats({
+          ...stats,
+          method: requestInfo.method || undefined,
+          url: requestInfo.url || undefined,
+          durationMs: durationMs || undefined,
+        });
       }
     },
   });
@@ -85,8 +94,12 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
   const server = http.createServer(async (req, res) => {
     const start = Date.now();
     try {
+      // Track request info for logging
+      requestInfo.method = req.method ?? '';
+      requestInfo.url = req.url ?? '';
+      requestInfo.startTime = start;
+
       await handleRequest(req, res, apiFetch, { cors, logger, method: req.method ?? 'GET', url: req.url ?? '/' });
-      logger?.log(`${req.method} ${req.url} -> ${res.statusCode} (${Date.now() - start}ms)`);
     } catch (err) {
       logger?.error('proxy request failed', err);
       if (!res.headersSent) {
