@@ -325,6 +325,9 @@ function buildUpstreamBody(
 
   const { request: chatRequest } = openai.translateRequest(request);
   chatRequest.stream = request.stream ?? true;
+  if (chatRequest.stream) {
+    (chatRequest as Record<string, unknown>).stream_options = { include_usage: true };
+  }
   return {
     upstreamBody: chatRequest,
     requestMetadata: {
