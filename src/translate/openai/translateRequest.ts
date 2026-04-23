@@ -317,16 +317,6 @@ function mapTools(tools: ResponsesTool[], stripStrict?: boolean): OpenAiChatTool
       });
       continue;
     }
-    if (tt === 'web_search') {
-      out.push({
-        type: 'web_search',
-        web_search: {
-          enable: true,
-          search_engine: 'search_pro_jina',
-        },
-      });
-      continue;
-    }
   }
   return out;
 }
