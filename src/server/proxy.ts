@@ -54,6 +54,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     provider: options.provider,
     baseUrl: options.baseUrl,
     apiVersion: options.apiVersion,
+    model: options.model,
     defaultHeaders: options.defaultHeaders,
     fetch: options.fetch,
     translate: options.translate,

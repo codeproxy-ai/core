@@ -12,16 +12,20 @@
  */
 
 import {
-  translateRequest,
+  translateRequest as claudeTranslateRequest,
   type TranslateRequestOptions,
 } from './providers/claude/translateRequest.js';
-import { translateResponse } from './providers/claude/translateResponse.js';
-import { translateStream } from './providers/claude/translateStream.js';
+import { translateResponse as claudeTranslateResponse } from './providers/claude/translateResponse.js';
+import { translateStream as claudeTranslateStream } from './providers/claude/translateStream.js';
+import { translateRequest as zaiTranslateRequest } from './providers/zai/translateRequest.js';
+import { translateResponse as zaiTranslateResponse } from './providers/zai/translateResponse.js';
+import { translateStream as zaiTranslateStream } from './providers/zai/translateStream.js';
 import { encodeSseEvent } from './utils/sse.js';
 import type { ResponsesRequest, ResponsesStreamEvent } from './types/responses.js';
 import type { AnthropicRequest, AnthropicResponse } from './types/anthropic.js';
+import type { OpenAiChatResponse } from './types/openai_chat.js';
 
-export type ProviderName = 'claude' | 'anthropic';
+export type ProviderName = 'claude' | 'anthropic' | 'zai';
 
 export interface CreateResponsesFetchOptions {
   /** Provider to route `/responses` calls to. */
@@ -30,6 +34,12 @@ export interface CreateResponsesFetchOptions {
   baseUrl?: string;
   /** Override the upstream API version header (Anthropic only). */
   apiVersion?: string;
+  /**
+   * Replace the caller-provided `model` field before translation.
+   * Useful when the client hard-codes an OpenAI model id but the upstream
+   * provider needs its own (e.g. forcing `glm-4.6` regardless of input).
+   */
+  model?: string;
   /** Extra headers merged into every upstream call. */
   defaultHeaders?: Record<string, string>;
   /** Underlying fetch used to issue upstream requests. Defaults to `globalThis.fetch`. */
@@ -46,6 +56,7 @@ export interface CreateResponsesFetchOptions {
 const DEFAULT_URLS: Record<ProviderName, string> = {
   claude: 'https://api.anthropic.com/v1/messages',
   anthropic: 'https://api.anthropic.com/v1/messages',
+  zai: 'https://api.z.ai/api/coding/paas/v4/chat/completions',
 };
 
 /**
@@ -87,6 +98,8 @@ export function createResponsesFetch(
     }
     if (!parsed) return jsonErrorResponse(400, 'Missing body for /responses');
 
+    if (options.model) parsed.model = options.model;
+
     return handleResponses(parsed, options, baseFetch, headers, signal);
   };
 
@@ -94,7 +107,7 @@ export function createResponsesFetch(
 }
 
 function isSupportedProvider(name: string): boolean {
-  return name === 'claude' || name === 'anthropic';
+  return name === 'claude' || name === 'anthropic' || name === 'zai';
 }
 
 function urlOf(input: RequestInfo | URL): string {
@@ -175,19 +188,19 @@ async function handleResponses(
   incomingHeaders: Record<string, string>,
   signal: AbortSignal | undefined,
 ): Promise<Response> {
-  const { request: anthropicRequest } = translateRequest(request, options.translate);
   const streaming = request.stream === true;
-  anthropicRequest.stream = streaming;
 
   const upstreamUrl = options.baseUrl ?? DEFAULT_URLS[options.provider];
   const headers = buildUpstreamHeaders(options, incomingHeaders);
+
+  const upstreamBody = buildUpstreamBody(request, options, streaming);
 
   let upstream: Response;
   try {
     upstream = await baseFetch(upstreamUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify(anthropicRequest),
+      body: JSON.stringify(upstreamBody.body),
       signal,
     });
   } catch (err) {
@@ -203,13 +216,27 @@ async function handleResponses(
   }
 
   if (!streaming) {
+    if (options.provider === 'zai') {
+      let body: OpenAiChatResponse;
+      try {
+        body = (await upstream.json()) as OpenAiChatResponse;
+      } catch (err) {
+        return jsonErrorResponse(502, `Failed to parse upstream JSON: ${(err as Error).message}`);
+      }
+      const translated = zaiTranslateResponse(body, { model: request.model });
+      return new Response(JSON.stringify(translated), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
     let body: AnthropicResponse;
     try {
       body = (await upstream.json()) as AnthropicResponse;
     } catch (err) {
       return jsonErrorResponse(502, `Failed to parse upstream JSON: ${(err as Error).message}`);
     }
-    const translated = translateResponse(body, { model: request.model });
+    const translated = claudeTranslateResponse(body, { model: request.model });
     return new Response(JSON.stringify(translated), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -220,19 +247,32 @@ async function handleResponses(
     return jsonErrorResponse(502, 'Upstream streaming response has no body');
   }
 
-  const stream = responsesEventsToSseStream(
-    translateStream(upstream.body, {
-      model: request.model,
-      requestMetadata: {
-        temperature: anthropicRequest.temperature,
-        top_p: anthropicRequest.top_p,
-        tools: (request.tools as unknown[]) ?? [],
-        tool_choice: request.tool_choice,
-        store: request.store ?? true,
-        metadata: (request.metadata as Record<string, unknown>) ?? {},
-      },
-    }),
-  );
+  const events =
+    options.provider === 'zai'
+      ? zaiTranslateStream(upstream.body, {
+          model: request.model,
+          requestMetadata: {
+            temperature: upstreamBody.temperature,
+            top_p: upstreamBody.top_p,
+            tools: (request.tools as unknown[]) ?? [],
+            tool_choice: request.tool_choice,
+            store: request.store ?? true,
+            metadata: (request.metadata as Record<string, unknown>) ?? {},
+          },
+        })
+      : claudeTranslateStream(upstream.body, {
+          model: request.model,
+          requestMetadata: {
+            temperature: upstreamBody.temperature,
+            top_p: upstreamBody.top_p,
+            tools: (request.tools as unknown[]) ?? [],
+            tool_choice: request.tool_choice,
+            store: request.store ?? true,
+            metadata: (request.metadata as Record<string, unknown>) ?? {},
+          },
+        });
+
+  const stream = responsesEventsToSseStream(events);
 
   return new Response(stream, {
     status: 200,
@@ -242,6 +282,31 @@ async function handleResponses(
       connection: 'keep-alive',
     },
   });
+}
+
+interface UpstreamBody {
+  body: unknown;
+  temperature: number | undefined;
+  top_p: number | undefined;
+}
+
+function buildUpstreamBody(
+  request: ResponsesRequest,
+  options: CreateResponsesFetchOptions,
+  streaming: boolean,
+): UpstreamBody {
+  if (options.provider === 'zai') {
+    const { request: zaiRequest } = zaiTranslateRequest(request, options.translate);
+    zaiRequest.stream = streaming;
+    return { body: zaiRequest, temperature: zaiRequest.temperature, top_p: zaiRequest.top_p };
+  }
+  const { request: anthropicRequest } = claudeTranslateRequest(request, options.translate);
+  anthropicRequest.stream = streaming;
+  return {
+    body: anthropicRequest,
+    temperature: anthropicRequest.temperature,
+    top_p: anthropicRequest.top_p,
+  };
 }
 
 /**

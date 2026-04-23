@@ -16,6 +16,7 @@ interface CliArgs {
   baseUrl?: string;
   apiVersion?: string;
   apikey?: string;
+  model?: string;
   cors?: boolean;
   help?: boolean;
 }
@@ -46,6 +47,9 @@ function parseArgs(argv: string[]): CliArgs {
       case '--apikey':
         out.apikey = take();
         break;
+      case '--model':
+        out.model = take();
+        break;
       case '--no-cors':
         out.cors = false;
         break;
@@ -56,6 +60,7 @@ function parseArgs(argv: string[]): CliArgs {
         else if (arg.startsWith('--base-url=')) out.baseUrl = arg.slice('--base-url='.length);
         else if (arg.startsWith('--api-version=')) out.apiVersion = arg.slice('--api-version='.length);
         else if (arg.startsWith('--apikey=')) out.apikey = arg.slice('--apikey='.length);
+        else if (arg.startsWith('--model=')) out.model = arg.slice('--model='.length);
         else {
           console.error(`Unknown argument: ${arg}`);
           out.help = true;
@@ -72,12 +77,13 @@ Usage:
   responses-api-translator --provider <name> [options]
 
 Options:
-  --provider <name>       Required. One of: claude, anthropic
+  --provider <name>       Required. One of: claude, anthropic, zai
   --host <host>           Bind host (default: 127.0.0.1)
   -p, --port <port>       Bind port (default: 8787; 0 = random)
   --base-url <url>        Override provider upstream URL
-  --api-version <ver>     Override anthropic-version header
+  --api-version <ver>     Override anthropic-version header (anthropic only)
   --apikey <key>          Override upstream Authorization: Bearer <key>
+  --model <name>          Override the model field in incoming requests
   --no-cors               Disable CORS headers
   -h, --help              Show help
 
@@ -86,6 +92,7 @@ native header) when calling the proxy. Nothing is stored server-side.
 
 Examples:
   responses-api-translator --provider claude
+  responses-api-translator --provider zai --apikey <zai-key>
   responses-api-translator --provider claude --host 0.0.0.0 --port 9000
 `);
 }
@@ -103,6 +110,7 @@ async function main(): Promise<void> {
     port: args.port,
     baseUrl: args.baseUrl,
     apiVersion: args.apiVersion,
+    model: args.model,
     defaultHeaders: args.apikey ? { authorization: `Bearer ${args.apikey}` } : undefined,
     cors: args.cors,
   };

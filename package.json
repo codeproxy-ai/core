@@ -27,6 +27,11 @@
       "import": "./dist/providers/claude/index.js",
       "require": "./dist/providers/claude/index.cjs"
     },
+    "./zai": {
+      "types": "./dist/providers/zai/index.d.ts",
+      "import": "./dist/providers/zai/index.js",
+      "require": "./dist/providers/zai/index.cjs"
+    },
     "./server": {
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js",

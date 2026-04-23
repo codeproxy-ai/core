@@ -1,4 +1,5 @@
 export * as claude from './providers/claude/index.js';
+export * as zai from './providers/zai/index.js';
 export type {
   ResponsesRequest,
   ResponsesResponse,
