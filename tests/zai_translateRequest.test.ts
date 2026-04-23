@@ -50,6 +50,36 @@ describe('translateRequest (Responses -> Zai)', () => {
     expect(request.messages[2]).toMatchObject({ role: 'tool', tool_call_id: 'call_1', content: 'file.txt' });
   });
 
+  it('backfills empty reasoning_content on assistant tool-call messages without prior reasoning', () => {
+    const { request } = translateRequest({
+      model: 'glm-4.6',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'go' }] },
+        { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
+        { type: 'function_call_output', call_id: 'call_1', output: 'ok' },
+      ],
+    });
+    const assistant = request.messages.find(
+      (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length,
+    );
+    expect(assistant).toBeDefined();
+    expect(assistant!.reasoning_content).toBe('');
+  });
+
+  it('preserves existing reasoning_content on assistant tool-call messages', () => {
+    const { request } = translateRequest({
+      model: 'glm-4.6',
+      input: [
+        { type: 'reasoning', content: [{ type: 'reasoning_text', text: 'thinking...' }] },
+        { type: 'function_call', call_id: 'call_1', name: 'shell', arguments: '{}' },
+      ],
+    });
+    const assistant = request.messages.find(
+      (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length,
+    );
+    expect(assistant!.reasoning_content).toBe('thinking...');
+  });
+
   it('maps temperature and top_p', () => {
     const { request } = translateRequest({
       model: 'zai-gpt-4',

@@ -71,6 +71,16 @@ export function translateRequest(
     if (toolChoice !== undefined) request.tool_choice = toolChoice;
   }
 
+  // Upstream (ZAI) rejects assistant tool-call messages without reasoning_content
+  // when thinking is enabled (server may enable it by default for some models).
+  // Ensure every assistant message carrying tool_calls has a reasoning_content
+  // field, using an empty string when the client didn't echo prior reasoning back.
+  for (const m of messages) {
+    if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length && m.reasoning_content == null) {
+      m.reasoning_content = '';
+    }
+  }
+
   return { request };
 }
 
