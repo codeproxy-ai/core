@@ -20,12 +20,15 @@ import { translateStream as claudeTranslateStream } from './providers/claude/tra
 import { translateRequest as zaiTranslateRequest } from './providers/zai/translateRequest.js';
 import { translateResponse as zaiTranslateResponse } from './providers/zai/translateResponse.js';
 import { translateStream as zaiTranslateStream } from './providers/zai/translateStream.js';
+import { translateRequest as openaiTranslateRequest } from './providers/openai/translateRequest.js';
+import { translateResponse as openaiTranslateResponse } from './providers/openai/translateResponse.js';
+import { translateStream as openaiTranslateStream } from './providers/openai/translateStream.js';
 import { encodeSseEvent } from './utils/sse.js';
 import type { ResponsesRequest, ResponsesStreamEvent } from './types/responses.js';
 import type { AnthropicRequest, AnthropicResponse } from './types/anthropic.js';
 import type { OpenAiChatResponse } from './types/openai_chat.js';
 
-export type ProviderName = 'claude' | 'anthropic' | 'zai';
+export type ProviderName = 'claude' | 'anthropic' | 'zai' | 'openai';
 
 export interface CacheStats {
   /** Number of tokens read from cache. */
@@ -73,6 +76,7 @@ const DEFAULT_URLS: Record<ProviderName, string> = {
   claude: 'https://api.anthropic.com/v1/messages',
   anthropic: 'https://api.anthropic.com/v1/messages',
   zai: 'https://api.z.ai/api/coding/paas/v4/chat/completions',
+  openai: 'https://api.openai.com/v1/chat/completions',
 };
 
 /**
@@ -123,7 +127,7 @@ export function createResponsesFetch(
 }
 
 function isSupportedProvider(name: string): boolean {
-  return name === 'claude' || name === 'anthropic' || name === 'zai';
+  return name === 'claude' || name === 'anthropic' || name === 'zai' || name === 'openai';
 }
 
 function urlOf(input: RequestInfo | URL): string {

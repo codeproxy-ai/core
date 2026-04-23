@@ -86,7 +86,7 @@ Usage:
   responses-api-translator --config <file> [options]
 
 Options:
-  --provider <name>       Provider to use (claude, anthropic, zai)
+  --provider <name>       Provider to use (claude, anthropic, zai, openai)
   --config <file>         Use a config file instead of --provider
   --host <host>           Bind host (default: 127.0.0.1)
   -p, --port <port>       Bind port (default: 8787; 0 = random)
@@ -116,6 +116,11 @@ Config File Mode:
         "provider": "zai",
         "baseUrl": "https://api.z.ai/api/coding/paas/v4/chat/completions",
         "apiKey": "your-zai-key"
+      },
+      "my-openai": {
+        "provider": "openai",
+        "baseUrl": "https://api.openai.com/v1/chat/completions",
+        "apiKey": "your-openai-key"
       }
     }
   }

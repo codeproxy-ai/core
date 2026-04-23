@@ -138,7 +138,7 @@ export function validateProviderConfig(provider: unknown): {
     return { valid: false, error: 'Provider must have a provider name (claude, anthropic, zai)' };
   }
 
-  const validProviders = ['claude', 'anthropic', 'zai'];
+  const validProviders = ['claude', 'anthropic', 'zai', 'openai'];
   if (!validProviders.includes(cfg.provider)) {
     return {
       valid: false,
