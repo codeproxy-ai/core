@@ -68,6 +68,10 @@ export interface OpenAiChatUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 

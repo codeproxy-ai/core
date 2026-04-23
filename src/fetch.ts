@@ -284,11 +284,11 @@ async function handleResponses(
       }
       const translated = zaiTranslateResponse(body, { model: request.model });
       if (options.onCacheStats) {
-        const usage = (body as any).usage ?? {};
-        const inputTokens = usage.input_tokens ?? 0;
-        const outputTokens = usage.output_tokens ?? 0;
+        const usage = (body as { usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } }).usage ?? {};
+        const inputTokens = usage.prompt_tokens ?? 0;
+        const outputTokens = usage.completion_tokens ?? 0;
         options.onCacheStats({
-          cachedTokens: 0,
+          cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
           cacheCreationTokens: 0,
           inputTokens,
           outputTokens,

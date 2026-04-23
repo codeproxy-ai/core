@@ -76,6 +76,7 @@ class StreamTranslator {
 
   private inputTokens = 0;
   private outputTokens = 0;
+  private cachedTokens = 0;
 
   constructor(options: TranslateStreamOptions) {
     this.model = options.model ?? '';
@@ -107,6 +108,8 @@ class StreamTranslator {
     if (chunk.usage) {
       if (typeof chunk.usage.prompt_tokens === 'number') this.inputTokens = chunk.usage.prompt_tokens;
       if (typeof chunk.usage.completion_tokens === 'number') this.outputTokens = chunk.usage.completion_tokens;
+      const cached = chunk.usage.prompt_tokens_details?.cached_tokens;
+      if (typeof cached === 'number') this.cachedTokens = cached;
     }
 
     const choice = chunk.choices?.[0];
@@ -236,6 +239,9 @@ class StreamTranslator {
         input_tokens: this.inputTokens,
         output_tokens: this.outputTokens,
         total_tokens: total,
+        input_tokens_details: {
+          cached_tokens: this.cachedTokens,
+        },
       },
     };
 

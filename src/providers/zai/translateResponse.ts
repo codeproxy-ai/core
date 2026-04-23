@@ -54,6 +54,7 @@ export function translateResponse(
   const input = usage.prompt_tokens ?? 0;
   const completion = usage.completion_tokens ?? 0;
   const total = usage.total_tokens ?? input + completion;
+  const cached = usage.prompt_tokens_details?.cached_tokens ?? 0;
 
   return {
     id,
@@ -66,6 +67,9 @@ export function translateResponse(
       input_tokens: input,
       output_tokens: completion,
       total_tokens: total,
+      input_tokens_details: {
+        cached_tokens: cached,
+      },
     },
   };
 }
