@@ -85,7 +85,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         `billed=${billedTokens}`,
       ];
       if (stats.cacheCreationTokens > 0) parts.push(`cache_creation=${stats.cacheCreationTokens}`);
-      logger?.log(`${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${durationMs}ms) [${parts.join(', ')}]`);
+      logger?.log(`[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${durationMs}ms) [${parts.join(', ')}]`);
 
       if (options.onCacheStats) {
         options.onCacheStats({
