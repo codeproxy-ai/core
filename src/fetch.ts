@@ -256,10 +256,17 @@ function buildUpstreamHeaders(
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(incoming)) {
     if (DROPPED_REQUEST_HEADERS.has(key)) continue;
-    if (key.startsWith('openai-') || key === 'x-stainless-arch' || key.startsWith('x-stainless')) {
-      continue;
-    }
+    if (isClientSpecificHeader(key)) continue;
     out[key] = value;
+  }
+
+  // Apply defaultHeaders BEFORE provider-specific auth conversion so that
+  // overrides (e.g. `--apikey`, which arrives as `authorization: Bearer X`)
+  // also feed into the Anthropic `x-api-key` rewrite below.
+  if (options.defaultHeaders) {
+    for (const [key, value] of Object.entries(options.defaultHeaders)) {
+      out[key.toLowerCase()] = value;
+    }
   }
 
   out['content-type'] = 'application/json';
@@ -268,17 +275,11 @@ function buildUpstreamHeaders(
     if (!out['anthropic-version']) {
       out['anthropic-version'] = options.apiVersion ?? '2023-06-01';
     }
-    if (!out['x-api-key'] && typeof out['authorization'] === 'string') {
+    if (typeof out['authorization'] === 'string') {
       const match = /^Bearer\s+(.+)$/i.exec(out['authorization']);
       if (match) out['x-api-key'] = match[1].trim();
     }
     delete out['authorization'];
-  }
-
-  if (options.defaultHeaders) {
-    for (const [key, value] of Object.entries(options.defaultHeaders)) {
-      out[key.toLowerCase()] = value;
-    }
   }
 
   return out;
@@ -292,6 +293,16 @@ const DROPPED_REQUEST_HEADERS = new Set([
   'accept',
   'user-agent',
 ]);
+
+function isClientSpecificHeader(key: string): boolean {
+  if (key.startsWith('openai-')) return true;
+  if (key.startsWith('x-stainless')) return true;
+  if (key.startsWith('x-codex-')) return true;
+  if (key === 'originator') return true;
+  if (key === 'session_id') return true;
+  if (key === 'x-client-request-id') return true;
+  return false;
+}
 
 function responsesEventsToSseStream(
   events: AsyncGenerator<ResponsesStreamEvent, void, void>,

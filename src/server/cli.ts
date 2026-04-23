@@ -15,6 +15,7 @@ interface CliArgs {
   port?: number;
   baseUrl?: string;
   apiVersion?: string;
+  apikey?: string;
   cors?: boolean;
   help?: boolean;
 }
@@ -42,8 +43,8 @@ function parseArgs(argv: string[]): CliArgs {
       case '--base-url':
         out.baseUrl = take();
         break;
-      case '--api-version':
-        out.apiVersion = take();
+      case '--apikey':
+        out.apikey = take();
         break;
       case '--no-cors':
         out.cors = false;
@@ -54,6 +55,7 @@ function parseArgs(argv: string[]): CliArgs {
         else if (arg.startsWith('--host=')) out.host = arg.slice('--host='.length);
         else if (arg.startsWith('--base-url=')) out.baseUrl = arg.slice('--base-url='.length);
         else if (arg.startsWith('--api-version=')) out.apiVersion = arg.slice('--api-version='.length);
+        else if (arg.startsWith('--apikey=')) out.apikey = arg.slice('--apikey='.length);
         else {
           console.error(`Unknown argument: ${arg}`);
           out.help = true;
@@ -75,6 +77,7 @@ Options:
   -p, --port <port>       Bind port (default: 8787; 0 = random)
   --base-url <url>        Override provider upstream URL
   --api-version <ver>     Override anthropic-version header
+  --apikey <key>          Override upstream Authorization: Bearer <key>
   --no-cors               Disable CORS headers
   -h, --help              Show help
 
@@ -100,6 +103,7 @@ async function main(): Promise<void> {
     port: args.port,
     baseUrl: args.baseUrl,
     apiVersion: args.apiVersion,
+    defaultHeaders: args.apikey ? { authorization: `Bearer ${args.apikey}` } : undefined,
     cors: args.cors,
   };
 

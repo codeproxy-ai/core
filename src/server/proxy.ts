@@ -68,7 +68,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
   const server = http.createServer(async (req, res) => {
     const start = Date.now();
     try {
-      await handleRequest(req, res, apiFetch, { cors });
+      await handleRequest(req, res, apiFetch, { cors, logger, method: req.method ?? 'GET', url: req.url ?? '/' });
       logger?.log(`${req.method} ${req.url} -> ${res.statusCode} (${Date.now() - start}ms)`);
     } catch (err) {
       logger?.error('proxy request failed', err);
@@ -110,7 +110,12 @@ async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
   apiFetch: typeof fetch,
-  opts: { cors: boolean },
+  opts: {
+    cors: boolean;
+    logger: Pick<Console, 'log' | 'warn' | 'error'> | null;
+    method: string;
+    url: string;
+  },
 ): Promise<void> {
   if (opts.cors) setCorsHeaders(res);
 
@@ -136,11 +141,19 @@ async function handleRequest(
     return;
   }
 
+  const requestBodyText = body ? body.toString('utf8') : undefined;
   const response = await apiFetch(`http://local${urlPath}`, {
     method,
     headers,
     body: body ? new Uint8Array(body) : undefined,
   });
+
+  const responseBodyText = response.body ? await response.clone().text() : '';
+  if (response.status >= 400) {
+    opts.logger?.error(
+      `[proxy-failure] request=${JSON.stringify({ method: opts.method, url: opts.url, headers, body: requestBodyText })} response=${JSON.stringify({ status: response.status, headers: headersToObject(response.headers), body: responseBodyText })}`,
+    );
+  }
 
   const outHeaders: Record<string, string> = {};
   response.headers.forEach((value, key) => {
@@ -179,6 +192,14 @@ function flattenIncomingHeaders(headers: IncomingMessage['headers']): Record<str
     if (value == null) continue;
     out[key.toLowerCase()] = Array.isArray(value) ? value.join(', ') : String(value);
   }
+  return out;
+}
+
+function headersToObject(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    out[key] = value;
+  });
   return out;
 }
 
