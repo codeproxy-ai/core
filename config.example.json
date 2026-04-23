@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "currentProvider": "claude",
+  "providers": {
+    "claude": {
+      "provider": "claude",
+      "baseUrl": "https://api.anthropic.com/v1/messages",
+      "apiKey": "",
+      "model": "claude-sonnet-4-5",
+      "apiVersion": "2023-06-01",
+      "headers": {}
+    },
+    "zai": {
+      "provider": "zai",
+      "baseUrl": "https://api.z.ai/api/coding/paas/v4/chat/completions",
+      "apiKey": "",
+      "model": "glm-4.6",
+      "headers": {}
+    }
+  }
+}

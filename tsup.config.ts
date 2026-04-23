@@ -5,6 +5,7 @@ export default defineConfig([
     entry: {
       index: 'src/index.ts',
       'providers/claude/index': 'src/providers/claude/index.ts',
+      'providers/zai/index': 'src/providers/zai/index.ts',
       'server/index': 'src/server/index.ts',
     },
     format: ['esm', 'cjs'],
@@ -23,5 +24,6 @@ export default defineConfig([
     sourcemap: false,
     banner: { js: '#!/usr/bin/env node' },
     outExtension: () => ({ js: '.js' }),
+    noExternal: ['../utils/config', '../types/config'],
   },
 ]);

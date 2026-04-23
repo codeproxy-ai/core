@@ -209,6 +209,7 @@ Common flags:
 
 | Flag | Default | Description |
 | --- | --- | --- |
+| `--config <file>` | — | Use a config file instead of --provider. See [CONFIG.md](./CONFIG.md) for details. |
 | `--provider <name>` | — | **Required.** `claude` or `anthropic`. |
 | `--host <host>` | `127.0.0.1` | Bind host. Use `0.0.0.0` for LAN. |
 | `-p, --port <port>` | `8787` | Bind port. `0` picks a random free port. |
@@ -296,6 +297,8 @@ instead.
 Returns a `fetch`-compatible function. See the “behaviour” and “options”
 sections above.
 
+**Note:** For detailed configuration file usage, see [CONFIG.md](./CONFIG.md).
+
 ### `translateRequest(req, options?)`
 
 ```ts
@@ -365,3 +368,45 @@ Zero runtime dependencies.
 ## License
 
 MIT
+
+## Configuration
+
+The proxy server can be configured using a `config.json` file. Copy `config.example.json` and customize it with your settings:
+
+```bash
+cp config.example.json config.json
+# Edit config.json with your API keys and settings
+```
+
+### Configuration Options
+
+- `provider`: API provider to use (`claude` or `zai`)
+- `port`: Port to listen on (default: 8787)
+- `host`: Host to bind to (default: 127.0.0.1)
+- `apiKey`: Your API key for the provider
+- `baseUrl`: Optional custom base URL for the API
+- `model`: Optional model override
+- `cors`: Enable CORS headers (default: true)
+- `logLevel`: Logging level (`info`, `warn`, `error`)
+
+### Security Note
+
+**Never commit `config.json` to version control!** It contains sensitive API keys.
+
+- `config.json` is listed in `.gitignore` to prevent accidental commits
+- Use `config.example.json` as a template for your configuration
+- Keep your real API keys only in your local `config.json`
+
+### Quick Start
+
+1. Copy the example configuration:
+   ```bash
+   cp config.example.json config.json
+   ```
+
+2. Edit `config.json` with your API key and settings
+
+3. Start the server:
+   ```bash
+   npm run dev:config
+   ```

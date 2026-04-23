@@ -27,6 +27,20 @@ import type { OpenAiChatResponse } from './types/openai_chat.js';
 
 export type ProviderName = 'claude' | 'anthropic' | 'zai';
 
+export interface CacheStats {
+  /** Number of tokens read from cache. */
+  cachedTokens: number;
+  /** Number of tokens used to create cache. */
+  cacheCreationTokens: number;
+  /** Total input tokens. */
+  inputTokens: number;
+  /** Total output tokens. */
+  outputTokens: number;
+  /** Total tokens (input + output). */
+  totalTokens: number;
+}
+
+
 export interface CreateResponsesFetchOptions {
   /** Provider to route `/responses` calls to. */
   provider: ProviderName;
@@ -51,6 +65,8 @@ export interface CreateResponsesFetchOptions {
    * Defaults to `options.fetch` or `globalThis.fetch`.
    */
   passthroughFetch?: typeof fetch;
+  /** Optional callback to receive cache statistics after request completes. */
+  onCacheStats?: (stats: CacheStats) => void;
 }
 
 const DEFAULT_URLS: Record<ProviderName, string> = {
@@ -181,6 +197,49 @@ async function extractRequest(
   return { method, body, signal: init?.signal ?? undefined, headers };
 }
 
+
+/**
+ * Wrap streaming events to collect cache statistics and call callback on completion.
+ */
+async function* collectCacheStatsFromStream(
+  events: AsyncGenerator<import('./types/responses.js').ResponsesStreamEvent, void, void>,
+  onCacheStats: ((stats: CacheStats) => void) | undefined,
+): AsyncGenerator<import('./types/responses.js').ResponsesStreamEvent, void, void> {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedTokens = 0;
+  let cacheCreationTokens = 0;
+
+  try {
+    for await (const event of events) {
+      // Collect usage information from response.completed event
+      if (event && event.type === 'response.completed') {
+        const response = event.response as { usage?: { input_tokens?: number; output_tokens?: number; input_tokens_details?: { cached_tokens?: number; cache_creation_tokens?: number } } };
+        if (response.usage) {
+          inputTokens = response.usage.input_tokens ?? 0;
+          outputTokens = response.usage.output_tokens ?? 0;
+          if (response.usage.input_tokens_details) {
+            cachedTokens = response.usage.input_tokens_details.cached_tokens ?? 0;
+            cacheCreationTokens = response.usage.input_tokens_details.cache_creation_tokens ?? 0;
+          }
+        }
+      }
+      yield event;
+    }
+  } finally {
+    // Call the callback when the stream completes
+    if (onCacheStats) {
+      onCacheStats({
+        cachedTokens,
+        cacheCreationTokens,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      });
+    }
+  }
+}
+
 async function handleResponses(
   request: ResponsesRequest,
   options: CreateResponsesFetchOptions,
@@ -224,6 +283,18 @@ async function handleResponses(
         return jsonErrorResponse(502, `Failed to parse upstream JSON: ${(err as Error).message}`);
       }
       const translated = zaiTranslateResponse(body, { model: request.model });
+      if (options.onCacheStats) {
+        const usage = (body as any).usage ?? {};
+        const inputTokens = usage.input_tokens ?? 0;
+        const outputTokens = usage.output_tokens ?? 0;
+        options.onCacheStats({
+          cachedTokens: 0,
+          cacheCreationTokens: 0,
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+        });
+      }
       return new Response(JSON.stringify(translated), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -237,6 +308,18 @@ async function handleResponses(
       return jsonErrorResponse(502, `Failed to parse upstream JSON: ${(err as Error).message}`);
     }
     const translated = claudeTranslateResponse(body, { model: request.model });
+    if (options.onCacheStats) {
+      const usage = (body.usage as { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) ?? {};
+      const inputTokens = usage.input_tokens ?? 0;
+      const outputTokens = usage.output_tokens ?? 0;
+      options.onCacheStats({
+        cachedTokens: usage.cache_read_input_tokens ?? 0,
+        cacheCreationTokens: usage.cache_creation_input_tokens ?? 0,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      });
+    }
     return new Response(JSON.stringify(translated), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -272,7 +355,8 @@ async function handleResponses(
           },
         });
 
-  const stream = responsesEventsToSseStream(events);
+  const wrappedEvents = collectCacheStatsFromStream(events, options.onCacheStats);
+  const stream = responsesEventsToSseStream(wrappedEvents);
 
   return new Response(stream, {
     status: 200,
@@ -382,7 +466,7 @@ function responsesEventsToSseStream(
           controller.close();
           return;
         }
-        controller.enqueue(encoder.encode(encodeSseEvent(value.type, value)));
+        controller.enqueue(encoder.encode(encodeSseEvent(value && value.type, value)));
       } catch (err) {
         controller.error(err);
       }

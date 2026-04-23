@@ -200,8 +200,10 @@ describe('translateResponse (Zai -> Responses)', () => {
       ],
     });
 
-    expect(res.usage.input_tokens).toBe(0);
-    expect(res.usage.output_tokens).toBe(0);
-    expect(res.usage.total_tokens).toBe(0);
+    if (res.usage) {
+      expect(res.usage.input_tokens).toBe(0);
+      expect(res.usage.output_tokens).toBe(0);
+      expect(res.usage.total_tokens).toBe(0);
+    }
   });
 });

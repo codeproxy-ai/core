@@ -69,7 +69,7 @@ describe('createResponsesFetch', () => {
 
   it('passes an existing x-api-key header through untouched', async () => {
     let captured: Record<string, string> = {};
-    const upstream: typeof fetch = (async (_input, init?: RequestInit) => {
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       captured = Object.fromEntries(
         Object.entries((init?.headers ?? {}) as Record<string, string>),
       );

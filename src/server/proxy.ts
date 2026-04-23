@@ -24,6 +24,8 @@ export interface StartProxyOptions extends Omit<CreateResponsesFetchOptions, 'pa
   cors?: boolean;
   /** Optional logger. Defaults to `console`. Pass `null` to silence. */
   logger?: Pick<Console, 'log' | 'warn' | 'error'> | null;
+  /** Optional callback to receive cache statistics after each request completes. */
+  onCacheStats?: (stats: { cachedTokens: number; cacheCreationTokens: number; inputTokens: number; outputTokens: number; totalTokens: number; method?: string; url?: string; durationMs?: number }) => void;
 }
 
 export interface RunningProxy {
@@ -64,6 +66,20 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         status: 404,
         headers: { 'content-type': 'application/json' },
       }),
+    onCacheStats: (stats) => {
+      // Log cache information and total tokens
+      const cacheInfo = [];
+      if (stats.cachedTokens > 0) cacheInfo.push(`${stats.cachedTokens} cached`);
+      if (stats.cacheCreationTokens > 0) cacheInfo.push(`${stats.cacheCreationTokens} cache creation`);
+      const cacheStr = cacheInfo.length > 0 ? ` [Cache: ${cacheInfo.join(', ')}]` : '';
+      const extraInfo = options.onCacheStats ? { method: '', url: '', durationMs: 0 } : {};
+      logger?.log(`${extraInfo.method || 'POST'} ${extraInfo.url || '/v1/responses'} -> 200 (${extraInfo.durationMs || 0}ms)${cacheStr} [Total: ${stats.totalTokens} tokens]`);
+      
+      // Call user callback if provided
+      if (options.onCacheStats) {
+        options.onCacheStats(stats);
+      }
+    },
   });
 
   const server = http.createServer(async (req, res) => {

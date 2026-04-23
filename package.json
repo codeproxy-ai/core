@@ -44,8 +44,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "start": "tsx src/start.ts --provider claude",
-    "build": "tsup",
+    "dev": "tsx src/server/cli.ts --provider claude --port 8787",
+    "dev:config": "tsx src/server/cli.ts --config config.json",
+    "build": "tsup && npx esbuild src/server/cli.ts --bundle --platform=node --outfile=dist/server/cli.js --format=esm --banner:js=\"#!/usr/bin/env node\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
