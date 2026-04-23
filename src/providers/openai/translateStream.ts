@@ -1,10 +1,10 @@
-import type { OpenAiChatResponse } from '../../types/openai_chat.js';
 import type {
   ResponsesResponse,
+  ResponsesOutputItem,
 } from '../../types/responses.js';
 
 export interface TranslateStreamOptions {
-  /** Id used for the resulting Responses object. Defaults to OpenAI id or generated. */
+  /** Id used for the resulting Responses object. Defaults to generated. */
   responseId?: string;
   /** Created timestamp (seconds). Defaults to `Date.now() / 1000`. */
   createdAt?: number;
@@ -13,8 +13,7 @@ export interface TranslateStreamOptions {
 }
 
 /**
- * Convert an OpenAI Chat stream into a Responses-API stream.
- * Since OpenAI Responses API is similar to Chat Completions, this is a minimal transformation.
+ * Convert an OpenAI Chat SSE stream into a Responses-API stream.
  */
 export async function* translateStream(
   upstream: ReadableStream<Uint8Array>,
@@ -23,11 +22,13 @@ export async function* translateStream(
   const reader = upstream.getReader();
   const decoder = new TextDecoder();
 
-  const responseId = options.responseId ?? '';
+  const responseId = options.responseId || `resp_${Date.now()}`;
   const createdAt = options.createdAt ?? Math.floor(Date.now() / 1000);
   const model = options.model ?? '';
 
   let buffer = '';
+  let currentText = '';
+  let currentToolCalls: Map<string, any> = new Map();
 
   try {
     while (true) {
@@ -47,25 +48,67 @@ export async function* translateStream(
         try {
           const chunk = JSON.parse(data) as any;
           
-          // Transform to Responses API format
-          const transformed: ResponsesResponse = {
-            id: responseId || chunk.id || '',
-            object: 'response',
-            created_at: createdAt,
-            model,
-            status: 'in_progress',
-            output: chunk.choices?.[0]?.delta?.content ? [{
-              id: chunk.id || '',
+          // Handle delta content
+          const delta = chunk.choices?.[0]?.delta;
+          if (!delta) continue;
+
+          const output: ResponsesOutputItem[] = [];
+          let hasContent = false;
+
+          // Process text content
+          if (delta.content) {
+            currentText += delta.content;
+            output.push({
+              id: `msg_${responseId}`,
               type: 'message',
               role: 'assistant',
               status: 'in_progress',
-              content: Array.isArray(chunk.choices[0].delta.content)
-                ? chunk.choices[0].delta.content
-                : [{ type: 'output_text', text: String(chunk.choices[0].delta.content) }],
-            }] : [],
-          };
+              content: [{ type: 'output_text', text: currentText }],
+            });
+            hasContent = true;
+          }
 
-          yield transformed;
+          // Process tool calls
+          if (delta.tool_calls && delta.tool_calls.length > 0) {
+            for (const toolCall of delta.tool_calls) {
+              const id = toolCall.id;
+              if (id && !currentToolCalls.has(id)) {
+                currentToolCalls.set(id, { id, function: { name: '', arguments: '' } });
+              }
+              
+              const current = id ? currentToolCalls.get(id) : currentToolCalls.get(delta.index);
+              if (current) {
+                if (toolCall.function?.name) {
+                  current.function.name += toolCall.function.name;
+                }
+                if (toolCall.function?.arguments) {
+                  current.function.arguments += toolCall.function.arguments;
+                }
+                
+                output.push({
+                  id: current.id,
+                  type: 'function_call',
+                  status: 'in_progress',
+                  name: current.function.name,
+                  arguments: current.function.arguments,
+                  call_id: current.id,
+                });
+                hasContent = true;
+              }
+            }
+          }
+
+          if (hasContent) {
+            const transformed: ResponsesResponse = {
+              id: responseId,
+              object: 'response',
+              created_at: createdAt,
+              model,
+              status: 'in_progress',
+              output,
+            };
+            yield transformed;
+          }
         } catch (e) {
           // Skip invalid JSON lines
         }
