@@ -120,6 +120,7 @@ describe('OpenAI translateRequest', () => {
     expect(result.request.messages?.[1]).toEqual({
       role: 'assistant',
       content: 'Thinking...',
+      reasoning_content: '.',
       tool_calls: [
         {
           id: 'call_123',
@@ -149,6 +150,7 @@ describe('OpenAI translateRequest', () => {
     expect(result.request.messages?.[1]).toEqual({
       role: 'assistant',
       content: null,
+      reasoning_content: '.',
       tool_calls: [
         {
           id: 'call_123',
@@ -157,5 +159,43 @@ describe('OpenAI translateRequest', () => {
         },
       ],
     });
+  });
+
+  it('should backfill empty reasoning_content on assistant tool-call messages', () => {
+    const result = translateRequest({
+      model: 'kimi-k2.6',
+      input: [
+        { type: 'message', role: 'user', content: 'go' },
+        { type: 'function_call', name: 'shell', arguments: '{}', call_id: 'c1' },
+        { type: 'function_call_output', call_id: 'c1', output: 'ok' },
+        { type: 'function_call', name: 'shell', arguments: '{}', call_id: 'c2' },
+      ],
+    });
+    const assistants = result.request.messages.filter(
+      (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length,
+    );
+    expect(assistants.length).toBe(2);
+    for (const a of assistants) expect(a.reasoning_content).toBe('.');
+  });
+
+  it('backfills reasoning_content with a non-empty placeholder so thinking-enabled upstreams accept it', () => {
+    // Regression: aihubmix-routed glm-4.6 rejects assistant tool-call messages
+    // when reasoning_content is missing OR an empty string. Codex clients with
+    // store:false never echo reasoning items back, so we must supply a
+    // non-empty placeholder — not just an empty string.
+    const result = translateRequest({
+      model: 'glm-4.6',
+      input: [
+        { type: 'message', role: 'user', content: 'go' },
+        { type: 'function_call', name: 'shell', arguments: '{}', call_id: 'c1' },
+      ],
+    });
+    const assistant = result.request.messages.find(
+      (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length,
+    );
+    expect(assistant).toBeDefined();
+    expect(typeof assistant!.reasoning_content).toBe('string');
+    expect(assistant!.reasoning_content).not.toBe('');
+    expect((assistant!.reasoning_content as string).length).toBeGreaterThan(0);
   });
 });

@@ -69,6 +69,18 @@ export function translateRequest(
     if (toolChoice !== undefined) request.tool_choice = toolChoice;
   }
 
+  // Some upstreams (e.g. aihubmix routing thinking-enabled glm-4.6) reject
+  // assistant tool-call messages whose reasoning_content is missing OR empty.
+  // Clients like Codex with store:false don't echo reasoning items back, so
+  // backfill a non-empty placeholder when the client didn't provide one.
+  for (const m of messages) {
+    if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length) {
+      if (m.reasoning_content == null || m.reasoning_content === '') {
+        m.reasoning_content = '.';
+      }
+    }
+  }
+
   return { request };
 }
 
