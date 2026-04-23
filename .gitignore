@@ -8,3 +8,5 @@ coverage
 config.json
 responses-api-translator.config.json
 *.local
+.claude/
+logs/
