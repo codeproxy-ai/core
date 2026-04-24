@@ -21,10 +21,9 @@ npm install responses-api-translator
 - **Upstream** speaks one of two formats, identified by `upstreamFormat`:
   - `'anthropic'` — Anthropic Messages API
   - `'openai-chat'` — OpenAI-compatible Chat Completions
-- `upstreamFormat` is **optional**. If omitted, it is inferred from `baseUrl`:
-  - path ends with `/messages` or host contains `anthropic` → `anthropic`
-  - path ends with `/chat/completions` → `openai-chat`
-  - otherwise you must pass it explicitly.
+- `upstreamFormat` is **optional**. If omitted, it is inferred from `baseUrl`.
+- `baseUrl` does **not** need the full path — `/v1/messages` (anthropic) or
+  `/v1/chat/completions` (openai-chat) is appended automatically if missing.
 
 ## Quick start
 
@@ -34,7 +33,7 @@ npm install responses-api-translator
 import { createResponsesFetch, parseSseStream } from 'responses-api-translator';
 
 const apiFetch = createResponsesFetch({
-  baseUrl: 'https://api.anthropic.com/v1/messages', // inferred → anthropic
+  baseUrl: 'https://api.anthropic.com', // inferred → anthropic, adds /v1/messages
 });
 
 const res = await apiFetch('https://example.invalid/v1/responses', {
@@ -77,7 +76,7 @@ const openai = new OpenAI({
   apiKey: API_KEY,
   baseURL: 'https://example.invalid/v1', // only the /v1/responses path is inspected
   fetch: createResponsesFetch({
-    baseUrl: 'https://api.openai.com/v1/chat/completions', // inferred → openai-chat
+    baseUrl: 'https://api.openai.com', // inferred → openai-chat, adds /v1/chat/completions
   }),
 });
 
@@ -91,7 +90,7 @@ If the URL doesn't match the inference rules, pass it explicitly:
 ```ts
 createResponsesFetch({
   upstreamFormat: 'openai-chat',
-  baseUrl: 'https://my-gateway.example.com/llm',
+  baseUrl: 'https://my-gateway.example.com',
 });
 ```
 
@@ -125,11 +124,11 @@ Behaviour:
 
 ```bash
 # Auto-infer upstreamFormat from --base-url
-npx responses-api-translator --base-url https://api.anthropic.com/v1/messages
+npx responses-api-translator --base-url https://api.anthropic.com
 
 # Explicit format
 npx responses-api-translator --upstream-format openai-chat \
-  --base-url https://api.openai.com/v1/chat/completions
+  --base-url https://api.openai.com
 
 # From config file
 npx responses-api-translator --config ./config.json
@@ -156,6 +155,7 @@ curl -N http://127.0.0.1:8787/v1/responses \
 | `--api-version <ver>` | `2023-06-01` | Override `anthropic-version`. |
 | `--apikey <key>` | — | Inject `Authorization: Bearer <key>` for upstream. |
 | `--model <name>` | — | Override the incoming `model` field. |
+| `--drop-images` | — | Drop image/file parts from user messages (for text-only upstreams). |
 | `--no-cors` | CORS on | Disable permissive CORS. |
 
 ### Config file
@@ -166,12 +166,13 @@ curl -N http://127.0.0.1:8787/v1/responses \
   "currentUpstream": "anthropic",
   "upstreams": {
     "anthropic": {
-      "baseUrl": "https://api.anthropic.com/v1/messages",
+      "baseUrl": "https://api.anthropic.com",
       "apiKey": "sk-ant-...",
-      "model": "claude-sonnet-4-5"
+      "model": "claude-sonnet-4-5",
+      "dropImages": true
     },
     "openai": {
-      "baseUrl": "https://api.openai.com/v1/chat/completions",
+      "baseUrl": "https://api.openai.com",
       "apiKey": "sk-...",
       "model": "gpt-4o-mini"
     }
@@ -180,6 +181,8 @@ curl -N http://127.0.0.1:8787/v1/responses \
 ```
 
 `format` is optional — inferred from `baseUrl` when omitted.
+`baseUrl` can omit the path suffix (`/v1/messages` or `/v1/chat/completions`);
+it is appended automatically based on the format.
 
 ### Programmatic
 
@@ -187,7 +190,7 @@ curl -N http://127.0.0.1:8787/v1/responses \
 import { startProxy } from 'responses-api-translator/server';
 
 const proxy = await startProxy({
-  baseUrl: 'https://api.anthropic.com/v1/messages',
+  baseUrl: 'https://api.anthropic.com', // /v1/messages added automatically
   host: '127.0.0.1',
   port: 8787,
 });
