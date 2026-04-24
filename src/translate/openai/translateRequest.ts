@@ -55,7 +55,7 @@ export function translateRequest(
       continue;
     }
     if (!raw || typeof raw !== 'object') continue;
-    processInputItem(raw as Record<string, unknown>, messages, { dropImages: options.dropImages === true });
+    processInputItem(raw as Record<string, unknown>, messages, options.dropImages);
   }
 
   const request: OpenAiChatRequest = {
@@ -108,7 +108,7 @@ function buildSystemContent(instructions: ResponsesRequest['instructions']): str
 function processInputItem(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
-  opts: { dropImages: boolean } = { dropImages: false },
+  dropImages?: boolean,
 ): void {
   const itemType = (item.type as string) || 'message';
 
@@ -169,7 +169,7 @@ function processInputItem(
             } else if (p.type === 'reasoning_text') {
               reasoningContent += String(p.text ?? '');
             } else if (p.type === 'input_image' || p.type === 'image' || p.type === 'image_url') {
-              if (opts.dropImages) continue;
+              if (dropImages) continue;
               let url = '';
               const imgUrl = (p as { image_url?: string | { url: string } }).image_url;
               if (typeof imgUrl === 'string') {
@@ -197,7 +197,6 @@ function processInputItem(
                 contentBlocks.push({ type: 'image_url', image_url: { url } });
               }
             } else if (p.type === 'input_file' || p.type === 'file') {
-              if (opts.dropImages) continue;
               const fileData = String(
                 (p as { file_data?: string; data?: string }).file_data ??
                   (p as { data?: string }).data ??
@@ -217,14 +216,7 @@ function processInputItem(
             }
           }
         }
-        const collapsed =
-          contentBlocks.length > 0 && contentBlocks.every((b) => b.type === 'text')
-            ? contentBlocks.map((b) => String(b.text ?? '')).join('')
-            : null;
-        const msg: OpenAiChatMessage =
-          collapsed !== null
-            ? { role, content: collapsed }
-            : { role, content: contentBlocks };
+        const msg: OpenAiChatMessage = { role, content: contentBlocks };
         if (reasoningContent) msg.reasoning_content = reasoningContent;
         const sig = item.thought_signature;
         if (typeof sig === 'string' && sig) msg.thought_signature = sig;
@@ -378,6 +370,7 @@ function processToolOutput(
 }
 
 function mapTools(tools: ResponsesTool[], stripStrict?: boolean): OpenAiChatTool[] {
+  /** If true, drop image/file parts from user messages (e.g. DeepSeek text-only models). */
   const out: OpenAiChatTool[] = [];
   for (const tool of tools) {
     if (!tool || typeof tool !== 'object') continue;

@@ -244,8 +244,10 @@ describe('createResponsesFetch', () => {
     const upstreamBody = JSON.parse(capturedBody);
     const userMsg = upstreamBody.messages.find((m: any) => m.role === 'user');
     // Should contain only the text part, image dropped
-    expect(Array.isArray(userMsg.content)).toBe(false);
-    expect(userMsg.content).toBe('desc');
+    expect(Array.isArray(userMsg.content)).toBe(true);
+    expect(userMsg.content).toHaveLength(1);
+    expect(userMsg.content[0].type).toBe('text');
+    expect(userMsg.content[0].text).toBe('desc');
   });
 
   it('drops image_url parts from assistant messages when dropImages is true', async () => {
@@ -286,7 +288,7 @@ describe('createResponsesFetch', () => {
 
     const upstreamBody = JSON.parse(capturedBody);
     const assistantMsg = upstreamBody.messages.find((m: any) => m.role === 'assistant');
-    // Assistant should have plain text, image dropped
+    // Assistant messages get concatenated to plain string (image parts dropped)
     expect(typeof assistantMsg.content).toBe('string');
     expect(assistantMsg.content).toBe('sure');
   });

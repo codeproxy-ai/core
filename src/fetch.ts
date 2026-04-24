@@ -72,7 +72,7 @@ export function createResponsesFetch(options: CreateResponsesFetchOptions): type
     if (!parsed) return jsonErrorResponse(400, 'Missing body for /responses');
 
     if (options.model) parsed.model = options.model;
-    return handleResponses(parsed, format, options, baseFetch, headers, signal);
+    return handleResponses(parsed, format, options, baseFetch, headers, signal, options.dropImages);
   };
 }
 
@@ -80,15 +80,6 @@ export function createResponsesFetch(options: CreateResponsesFetchOptions): type
 
 function normalizeFormat(v: string): UpstreamFormat | null {
   return v === 'anthropic' || v === 'openai-chat' ? (v as UpstreamFormat) : null;
-}
-
-function isDeepseekBaseUrl(baseUrl: string): boolean {
-  if (!baseUrl) return false;
-  try {
-    return new URL(baseUrl).hostname.toLowerCase().includes('deepseek');
-  } catch {
-    return baseUrl.toLowerCase().includes('deepseek');
-  }
 }
 
 function inferFormatFromUrl(baseUrl: string): UpstreamFormat | null {
@@ -209,7 +200,7 @@ function buildUpstreamBody(request: ResponsesRequest, format: UpstreamFormat, st
     ar.stream = streaming;
     return { upstreamBody: ar, requestMetadata: buildRequestMetadata(request, ar.temperature, ar.top_p) };
   }
-  const { request: cr } = openai.translateRequest(request, { dropImages: dropImages ?? isDeepseekBaseUrl(baseUrl) });
+  const { request: cr } = openai.translateRequest(request, { dropImages: dropImages });
   cr.stream = streaming;
   if (streaming) (cr as Record<string, unknown>).stream_options = { include_usage: true };
   return { upstreamBody: cr, requestMetadata: buildRequestMetadata(request, cr.temperature, cr.top_p) };
