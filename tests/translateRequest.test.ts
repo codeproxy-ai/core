@@ -117,4 +117,43 @@ describe('translateRequest (Responses -> Anthropic)', () => {
     });
     expect(request.tool_choice).toEqual({ type: 'any' });
   });
+
+  it('translates input_image with data URL image_url to base64 image block', () => {
+    const { request } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'what is this?' },
+            { type: 'input_image', image_url: 'data:image/png;base64,AAA' },
+          ],
+        },
+      ],
+    });
+    expect(request.messages[0]).toEqual({
+      role: 'user',
+      content: [
+        { type: 'text', text: 'what is this?' },
+        { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAA' } },
+      ],
+    });
+  });
+
+  it('translates input_image with raw data+mime_type', () => {
+    const { request } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_image', data: 'BBB', mime_type: 'image/jpeg' }],
+        },
+      ],
+    });
+    expect(request.messages[0].content).toEqual([
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'BBB' } },
+    ]);
+  });
 });

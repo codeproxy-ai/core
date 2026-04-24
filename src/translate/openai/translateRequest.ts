@@ -120,27 +120,27 @@ function processInputItem(
     let role = (item.role as string) || 'user';
     if (role === 'developer') role = 'system';
 
-    let content = '';
     let reasoningContent = (item.reasoning_content as string | undefined) ?? '';
     const rawContent = item.content;
-    if (typeof rawContent === 'string') {
-      content = rawContent;
-    } else if (Array.isArray(rawContent)) {
-      for (const part of rawContent) {
-        if (typeof part === 'string') {
-          content += part;
-        } else if (part && typeof part === 'object') {
-          const p = part as ResponsesContentPart;
-          if (p.type === 'input_text' || p.type === 'text' || p.type === 'output_text') {
-            content += String(p.text ?? '');
-          } else if (p.type === 'reasoning_text') {
-            reasoningContent += String(p.text ?? '');
+
+    if (role === 'assistant' || role === 'model') {
+      let content = '';
+      if (typeof rawContent === 'string') {
+        content = rawContent;
+      } else if (Array.isArray(rawContent)) {
+        for (const part of rawContent) {
+          if (typeof part === 'string') {
+            content += part;
+          } else if (part && typeof part === 'object') {
+            const p = part as ResponsesContentPart;
+            if (p.type === 'input_text' || p.type === 'text' || p.type === 'output_text') {
+              content += String(p.text ?? '');
+            } else if (p.type === 'reasoning_text') {
+              reasoningContent += String(p.text ?? '');
+            }
           }
         }
       }
-    }
-
-    if (role === 'assistant' || role === 'model') {
       const amsg = getLastAssistant();
       if (content) {
         amsg.content = ((amsg.content as string | null | undefined) ?? '') + content;
@@ -151,7 +151,74 @@ function processInputItem(
       const sig = item.thought_signature;
       if (typeof sig === 'string' && sig) amsg.thought_signature = sig;
     } else {
-      messages.push({ role, content: content || '' });
+      if (typeof rawContent === 'string') {
+        messages.push({ role, content: rawContent });
+      } else if (Array.isArray(rawContent)) {
+        const contentBlocks: Array<{ type: string; [k: string]: unknown }> = [];
+        for (const part of rawContent) {
+          if (typeof part === 'string') {
+            contentBlocks.push({ type: 'text', text: part });
+          } else if (part && typeof part === 'object') {
+            const p = part as ResponsesContentPart;
+            if (p.type === 'input_text' || p.type === 'text' || p.type === 'output_text') {
+              contentBlocks.push({ type: 'text', text: String(p.text ?? '') });
+            } else if (p.type === 'reasoning_text') {
+              reasoningContent += String(p.text ?? '');
+            } else if (p.type === 'input_image' || p.type === 'image' || p.type === 'image_url') {
+              let url = '';
+              const imgUrl = (p as { image_url?: string | { url: string } }).image_url;
+              if (typeof imgUrl === 'string') {
+                url = imgUrl;
+              } else if (imgUrl && typeof imgUrl === 'object' && imgUrl.url) {
+                url = imgUrl.url;
+              } else {
+                const imgData = String(
+                  (p as { data?: string; base64?: string }).data ??
+                    (p as { base64?: string }).base64 ??
+                    '',
+                );
+                if (imgData) {
+                  const mimeType = String(
+                    (p as { mime_type?: string; media_type?: string }).mime_type ??
+                      (p as { media_type?: string }).media_type ??
+                      'image/png',
+                  );
+                  url = imgData.startsWith('data:')
+                    ? imgData
+                    : `data:${mimeType};base64,${imgData}`;
+                }
+              }
+              if (url) {
+                contentBlocks.push({ type: 'image_url', image_url: { url } });
+              }
+            } else if (p.type === 'input_file' || p.type === 'file') {
+              const fileData = String(
+                (p as { file_data?: string; data?: string }).file_data ??
+                  (p as { data?: string }).data ??
+                  '',
+              );
+              const mimeType = String(
+                (p as { mime_type?: string; media_type?: string }).mime_type ??
+                  (p as { media_type?: string }).media_type ??
+                  'application/pdf',
+              );
+              if (fileData) {
+                const url = fileData.startsWith('data:')
+                  ? fileData
+                  : `data:${mimeType};base64,${fileData}`;
+                contentBlocks.push({ type: 'image_url', image_url: { url } });
+              }
+            }
+          }
+        }
+        const msg: OpenAiChatMessage = { role, content: contentBlocks };
+        if (reasoningContent) msg.reasoning_content = reasoningContent;
+        const sig = item.thought_signature;
+        if (typeof sig === 'string' && sig) msg.thought_signature = sig;
+        messages.push(msg);
+      } else {
+        messages.push({ role, content: '' });
+      }
     }
     return;
   }

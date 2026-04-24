@@ -222,15 +222,47 @@ function buildMessages(data: ResponsesRequest, systemBlocks: AnthropicTextBlock[
             const p = part as ResponsesContentPart;
             if (p.type === 'input_text' || p.type === 'text' || p.type === 'output_text') {
               contentBlocks.push({ type: 'text', text: String(p.text ?? '') });
-            } else if (p.type === 'input_image') {
-              contentBlocks.push({
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: (p as { mime_type?: string }).mime_type || 'image/png',
-                  data: String((p as { data?: string }).data ?? ''),
-                },
-              });
+            } else if (p.type === 'input_image' || p.type === 'image' || p.type === 'image_url') {
+              const imgUrl = (p as { image_url?: string | { url: string } }).image_url;
+              const urlStr =
+                typeof imgUrl === 'string'
+                  ? imgUrl
+                  : imgUrl && typeof imgUrl === 'object'
+                    ? imgUrl.url
+                    : '';
+              if (urlStr.startsWith('data:')) {
+                const m = /^data:([^;,]+);base64,(.*)$/.exec(urlStr);
+                if (m) {
+                  contentBlocks.push({
+                    type: 'image',
+                    source: { type: 'base64', media_type: m[1], data: m[2] },
+                  });
+                }
+              } else if (urlStr) {
+                contentBlocks.push({
+                  type: 'image',
+                  source: { type: 'url', url: urlStr } as unknown as {
+                    type: 'base64';
+                    media_type: string;
+                    data: string;
+                  },
+                });
+              } else {
+                const data = String((p as { data?: string; base64?: string }).data ?? (p as { base64?: string }).base64 ?? '');
+                if (data) {
+                  contentBlocks.push({
+                    type: 'image',
+                    source: {
+                      type: 'base64',
+                      media_type:
+                        (p as { mime_type?: string; media_type?: string }).mime_type ||
+                        (p as { media_type?: string }).media_type ||
+                        'image/png',
+                      data,
+                    },
+                  });
+                }
+              }
             } else if (p.type === 'input_file') {
               contentBlocks.push({
                 type: 'document',

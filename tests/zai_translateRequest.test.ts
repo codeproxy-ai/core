@@ -158,4 +158,83 @@ describe('translateRequest (Responses -> Zai)', () => {
     expect(request.messages[0]).toMatchObject({ role: 'user', content: 'hello' });
     expect(request.messages[1]).toMatchObject({ role: 'user', content: 'world' });
   });
+
+  it('translates input_image with image_url string (Responses API format)', () => {
+    const { request } = translateRequest({
+      model: 'zai-gpt-4',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'what is this?' },
+            { type: 'input_image', image_url: 'data:image/png;base64,AAA' },
+          ],
+        },
+      ],
+    }, { defaultMaxTokens: 4096 });
+    expect(request.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'what is this?' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
+        ],
+      },
+    ]);
+  });
+
+  it('translates input_image with image_url object {url}', () => {
+    const { request } = translateRequest({
+      model: 'zai-gpt-4',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_image', image_url: { url: 'https://example.com/a.png' } },
+          ],
+        },
+      ],
+    }, { defaultMaxTokens: 4096 });
+    expect(request.messages[0].content).toEqual([
+      { type: 'image_url', image_url: { url: 'https://example.com/a.png' } },
+    ]);
+  });
+
+  it('translates input_image with data+mime_type fallback', () => {
+    const { request } = translateRequest({
+      model: 'zai-gpt-4',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_image', data: 'BBB', mime_type: 'image/jpeg' },
+          ],
+        },
+      ],
+    }, { defaultMaxTokens: 4096 });
+    expect(request.messages[0].content).toEqual([
+      { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,BBB' } },
+    ]);
+  });
+
+  it('translates input_file to image_url data URL', () => {
+    const { request } = translateRequest({
+      model: 'zai-gpt-4',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_file', file_data: 'CCC', mime_type: 'application/pdf' },
+          ],
+        },
+      ],
+    }, { defaultMaxTokens: 4096 });
+    expect(request.messages[0].content).toEqual([
+      { type: 'image_url', image_url: { url: 'data:application/pdf;base64,CCC' } },
+    ]);
+  });
 });
