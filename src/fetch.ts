@@ -83,9 +83,13 @@ function normalizeBaseUrl(url: string, format: UpstreamFormat): string {
   try {
     const u = new URL(url);
     const path = u.pathname.replace(/\/+$/, '');
-    if (format === 'anthropic' && !path.endsWith('/messages')) {
+    if (format === 'anthropic') {
+      if (path.endsWith('/v1/messages') || path.endsWith('/messages')) return u.toString();
+      if (path.endsWith('/v1')) { u.pathname += '/messages'; return u.toString(); }
       u.pathname = '/v1/messages';
-    } else if (format === 'openai-chat' && !path.endsWith('/chat/completions')) {
+    } else {
+      if (path.endsWith('/v1/chat/completions') || path.endsWith('/chat/completions')) return u.toString();
+      if (path.endsWith('/v1')) { u.pathname += '/chat/completions'; return u.toString(); }
       u.pathname = '/v1/chat/completions';
     }
     return u.toString();
