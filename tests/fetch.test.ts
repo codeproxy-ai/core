@@ -95,6 +95,45 @@ describe('createResponsesFetch', () => {
     expect(captured['x-api-key']).toBe('explicit-key');
   });
 
+  it('drops incoming user-agent and forwards defaultHeaders user-agent to upstream', async () => {
+    let captured: Record<string, string> = {};
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      captured = Object.fromEntries(
+        Object.entries((init?.headers ?? {}) as Record<string, string>),
+      );
+      return new Response(
+        JSON.stringify({
+          id: 'c1',
+          object: 'chat.completion',
+          model: 'kimi-for-coding',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://api.kimi.com/coding/v1',
+      fetch: upstream,
+      defaultHeaders: { 'user-agent': 'claude-cli/1.0.0 (external, cli)' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'user-agent': 'codex-cli/9.9.9',
+        authorization: 'Bearer sk-test',
+      },
+      body: JSON.stringify({ model: 'kimi-for-coding', input: 'hi' }),
+    });
+
+    expect(captured['user-agent']).toBe('claude-cli/1.0.0 (external, cli)');
+    expect(captured['authorization']).toBe('Bearer sk-test');
+  });
+
   it('re-emits a streaming /responses request as SSE', async () => {
     const upstream = mockAnthropicStream([
       {
