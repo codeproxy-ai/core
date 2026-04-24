@@ -213,9 +213,6 @@ async function handleRequest(
 
   const responseBodyText = response.body ? await response.clone().text() : '';
   if (response.status >= 400) {
-    opts.logger?.error(
-      `[proxy-failure] request=${JSON.stringify({ method: opts.method, url: opts.url, headers, body: requestBodyText })} response=${JSON.stringify({ status: response.status, headers: headersToObject(response.headers), body: responseBodyText })}`,
-    );
     try {
       const filePath = saveErrorDump({
         method: opts.method,
