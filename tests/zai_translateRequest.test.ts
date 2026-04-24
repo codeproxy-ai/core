@@ -66,6 +66,21 @@ describe('translateRequest (Responses -> Zai)', () => {
     expect(assistant!.reasoning_content).toBe('.');
   });
 
+  it('backfills reasoning_content on plain assistant text messages (GLM thinking mode)', () => {
+    const { request } = translateRequest({
+      model: 'glm-4.6',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'hello' }] },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'again' }] },
+      ],
+    });
+    const assistant = request.messages.find((m) => m.role === 'assistant');
+    expect(assistant).toBeDefined();
+    expect(assistant!.tool_calls).toBeUndefined();
+    expect(assistant!.reasoning_content).toBe('.');
+  });
+
   it('preserves existing reasoning_content on assistant tool-call messages', () => {
     const { request } = translateRequest({
       model: 'glm-4.6',

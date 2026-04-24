@@ -171,6 +171,7 @@ async function loadConfigAndApplyOverrides(
 
   console.log(`Loaded config from: ${configPath}`);
   console.log(`Current upstream: ${config.currentUpstream}${upstreamConfig.format ? ` (${upstreamConfig.format})` : ''}`);
+  console.log(`Model: ${upstreamConfig.model || "(not set)"}`);
 
   const options: StartProxyOptions = {
     upstreamFormat: upstreamConfig.format,

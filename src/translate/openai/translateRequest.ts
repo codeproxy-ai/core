@@ -77,11 +77,12 @@ export function translateRequest(
     if (toolChoice !== undefined) request.tool_choice = toolChoice;
   }
 
-  // Some upstreams reject assistant tool-call messages without reasoning_content.
+  // Some upstreams (e.g. GLM thinking mode) require reasoning_content on every
+  // assistant turn when thinking is enabled — not just ones that make tool calls.
   const placeholder = options.reasoningPlaceholder ?? '.';
   if (options.backfillReasoning !== false && placeholder) {
     for (const m of messages) {
-      if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length && m.reasoning_content == null) {
+      if (m.role === 'assistant' && m.reasoning_content == null) {
         m.reasoning_content = placeholder;
       }
     }
