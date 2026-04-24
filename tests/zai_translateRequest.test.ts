@@ -252,4 +252,26 @@ describe('translateRequest (Responses -> Zai)', () => {
       { type: 'image_url', image_url: { url: 'data:application/pdf;base64,CCC' } },
     ]);
   });
+
+  it('reorders tool messages when user message is injected between function_call and function_call_output', () => {
+    const { request } = translateRequest({
+      model: 'glm-4.6',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'go' }] },
+        { type: 'function_call', call_id: 'call_1', name: 'exec_command', arguments: '{"cmd":"ls"}' },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Warning: something' }] },
+        { type: 'function_call_output', call_id: 'call_1', output: 'file.txt' },
+      ],
+    });
+
+    // The assistant message with tool_calls must be immediately followed by the tool response
+    const assistantIdx = request.messages.findIndex(
+      (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length,
+    );
+    expect(assistantIdx).toBeGreaterThanOrEqual(0);
+    const nextMsg = request.messages[assistantIdx + 1];
+    expect(nextMsg.role).toBe('tool');
+    expect(nextMsg.tool_call_id).toBe('call_1');
+    expect(nextMsg.content).toBe('file.txt');
+  });
 });

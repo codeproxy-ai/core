@@ -90,6 +90,11 @@ export function translateRequest(
     }
   }
 
+  // Reorder messages to ensure tool outputs immediately follow their tool calls.
+  // Some upstreams (e.g. GLM) require tool messages to come right after the assistant
+  // message that emitted the tool_calls, with no other message in between.
+  repairToolMessageOrder(messages);
+
   return { request };
 }
 
@@ -412,4 +417,69 @@ function isEmpty(v: unknown): boolean {
   if (Array.isArray(v)) return v.length === 0;
   if (typeof v === 'object') return Object.keys(v as object).length === 0;
   return false;
+}
+
+/**
+ * Reorder messages so that every `role: 'tool'` message immediately follows
+ * the `role: 'assistant'` message that contains its matching `tool_call_id`.
+ *
+ * Codex Desktop sometimes injects a user message (e.g. a warning) between a
+ * `function_call` and the corresponding `function_call_output`.  OpenAI Chat
+ * format requires strict alternating: assistant (with tool_calls) → tool →
+ * assistant → tool → …  This function repairs that ordering.
+ */
+function repairToolMessageOrder(messages: OpenAiChatMessage[]): void {
+  if (messages.length === 0) return;
+
+  // Phase 1: group messages by assistant "block".  A block starts at an
+  // assistant message (possibly with tool_calls) and contains any subsequent
+  // non-assistant messages until the next assistant message.
+  interface Block {
+    assistant: OpenAiChatMessage;
+    trailing: OpenAiChatMessage[]; // user / tool / system messages after assistant
+  }
+
+  const blocks: Block[] = [];
+  let currentBlock: Block | null = null;
+
+  for (const msg of messages) {
+    if (msg.role === 'assistant') {
+      currentBlock = { assistant: msg, trailing: [] };
+      blocks.push(currentBlock);
+    } else if (currentBlock) {
+      currentBlock.trailing.push(msg);
+    } else {
+      // Message before any assistant (e.g. system) – keep as a standalone pseudo-block
+      blocks.push({ assistant: { role: 'assistant', content: null }, trailing: [msg] });
+    }
+  }
+
+  // Phase 2: for each block, sort trailing messages so that tool messages
+  // whose tool_call_id matches one of the assistant's tool_calls come first.
+  for (const block of blocks) {
+    const toolCallIds = new Set(
+      (block.assistant.tool_calls ?? []).map((tc) => tc.id).filter(Boolean),
+    );
+    if (toolCallIds.size === 0) continue;
+
+    const tools: OpenAiChatMessage[] = [];
+    const others: OpenAiChatMessage[] = [];
+    for (const m of block.trailing) {
+      if (m.role === 'tool' && toolCallIds.has(m.tool_call_id as string)) {
+        tools.push(m);
+      } else {
+        others.push(m);
+      }
+    }
+    block.trailing = [...tools, ...others];
+  }
+
+  // Phase 3: flatten back into messages array
+  messages.length = 0;
+  for (const block of blocks) {
+    if (block.assistant.tool_calls || block.assistant.content != null) {
+      messages.push(block.assistant);
+    }
+    messages.push(...block.trailing);
+  }
 }
