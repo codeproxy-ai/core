@@ -44,8 +44,9 @@ export interface CreateResponsesFetchOptions {
 export function createResponsesFetch(options: CreateResponsesFetchOptions): typeof fetch {
   if (!options.baseUrl) throw new Error('baseUrl is required');
 
-  const format = options.upstreamFormat
-    ? normalizeFormat(options.upstreamFormat)
+  const rawFormat = options.upstreamFormat;
+  const format = rawFormat
+    ? normalizeFormat(rawFormat)
     : inferFormatFromUrl(options.baseUrl);
   if (!format) {
     throw new Error(
@@ -77,6 +78,21 @@ export function createResponsesFetch(options: CreateResponsesFetchOptions): type
 }
 
 // ── format helpers ──
+
+function normalizeBaseUrl(url: string, format: UpstreamFormat): string {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/+$/, '');
+    if (format === 'anthropic' && !path.endsWith('/messages')) {
+      u.pathname = '/v1/messages';
+    } else if (format === 'openai-chat' && !path.endsWith('/chat/completions')) {
+      u.pathname = '/v1/chat/completions';
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
 
 function normalizeFormat(v: string): UpstreamFormat | null {
   return v === 'anthropic' || v === 'openai-chat' ? (v as UpstreamFormat) : null;
@@ -153,10 +169,11 @@ async function handleResponses(
   dropImages?: boolean,
 ): Promise<Response> {
   const streaming = request.stream ?? false;
+  const resolvedUrl = normalizeBaseUrl(options.baseUrl, format);
   const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl, dropImages);
   const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
 
-  const upstream = await baseFetch(options.baseUrl, {
+  const upstream = await baseFetch(resolvedUrl, {
     method: 'POST',
     headers: upstreamHeaders,
     body: JSON.stringify(upstreamBody),
