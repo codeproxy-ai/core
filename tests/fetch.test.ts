@@ -292,3 +292,35 @@ describe('createResponsesFetch', () => {
     expect(typeof assistantMsg.content).toBe('string');
     expect(assistantMsg.content).toBe('sure');
   });
+
+  it('defaults to openai-chat when upstreamFormat cannot be inferred from baseUrl', async () => {
+    let capturedUrl = '';
+    const upstream: typeof fetch = (async (input: RequestInfo | URL) => {
+      capturedUrl = typeof input === 'string' ? input : input.toString();
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'glm-5.1',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      fetch: upstream,
+    });
+
+    const res = await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'glm-5.1', input: [{ type: 'message', role: 'user', content: 'hi' }] }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(capturedUrl).toBe('https://integrate.api.nvidia.com/v1/chat/completions');
+  });
