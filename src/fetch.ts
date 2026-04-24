@@ -35,6 +35,8 @@ export interface CreateResponsesFetchOptions {
   fetch?: typeof fetch;
   /** Non-/responses traffic forward target. Defaults to `options.fetch`. */
   passthroughFetch?: typeof fetch;
+  /** Drop image/file parts from user messages (e.g. DeepSeek text-only models). */
+  dropImages?: boolean;
   /** Optional callback to receive cache statistics. */
   onCacheStats?: (stats: CacheStats) => void;
 }
@@ -157,9 +159,10 @@ async function handleResponses(
   baseFetch: typeof fetch,
   incomingHeaders: Record<string, string>,
   signal: AbortSignal | undefined,
+  dropImages?: boolean,
 ): Promise<Response> {
   const streaming = request.stream ?? false;
-  const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl);
+  const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl, dropImages);
   const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
 
   const upstream = await baseFetch(options.baseUrl, {
@@ -200,13 +203,13 @@ function buildRequestMetadata(request: ResponsesRequest, temperature?: number, t
   return { temperature, top_p, tools: (request.tools as unknown[]) ?? [], tool_choice: request.tool_choice, store: request.store ?? true, metadata: (request.metadata as Record<string, unknown>) ?? {} };
 }
 
-function buildUpstreamBody(request: ResponsesRequest, format: UpstreamFormat, streaming: boolean, baseUrl: string): { upstreamBody: unknown; requestMetadata: ReturnType<typeof buildRequestMetadata> } {
+function buildUpstreamBody(request: ResponsesRequest, format: UpstreamFormat, streaming: boolean, baseUrl: string, dropImages?: boolean): { upstreamBody: unknown; requestMetadata: ReturnType<typeof buildRequestMetadata> } {
   if (format === 'anthropic') {
     const { request: ar } = anthropic.translateRequest(request);
     ar.stream = streaming;
     return { upstreamBody: ar, requestMetadata: buildRequestMetadata(request, ar.temperature, ar.top_p) };
   }
-  const { request: cr } = openai.translateRequest(request, { dropImages: isDeepseekBaseUrl(baseUrl) });
+  const { request: cr } = openai.translateRequest(request, { dropImages: dropImages ?? isDeepseekBaseUrl(baseUrl) });
   cr.stream = streaming;
   if (streaming) (cr as Record<string, unknown>).stream_options = { include_usage: true };
   return { upstreamBody: cr, requestMetadata: buildRequestMetadata(request, cr.temperature, cr.top_p) };

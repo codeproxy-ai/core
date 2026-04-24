@@ -21,6 +21,7 @@ interface CliArgs {
   apikey?: string;
   model?: string;
   cors?: boolean;
+  dropImages?: boolean;
   help?: boolean;
 }
 
@@ -58,6 +59,9 @@ function parseArgs(argv: string[]): CliArgs {
         break;
       case '--model':
         out.model = take();
+        break;
+      case '--drop-images':
+        out.dropImages = true;
         break;
       case '--no-cors':
         out.cors = false;
@@ -180,6 +184,7 @@ async function loadConfigAndApplyOverrides(
     model: overrides.model || upstreamConfig.model,
     host: overrides.host || upstreamConfig.host,
     port: overrides.port !== undefined ? overrides.port : ((config as any).port ? Number((config as any).port) : upstreamConfig.port ? Number(upstreamConfig.port) : undefined),
+    dropImages: upstreamConfig.dropImages,
     cors: overrides.cors,
   };
 
@@ -222,6 +227,7 @@ async function main(): Promise<void> {
       apiVersion: args.apiVersion,
       model: args.model,
       defaultHeaders: args.apikey ? { authorization: `Bearer ${args.apikey}` } : undefined,
+      dropImages: args.dropImages,
       cors: args.cors,
     };
   } else {

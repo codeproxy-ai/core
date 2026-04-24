@@ -148,6 +148,10 @@ export function validateUpstreamConfig(upstream: unknown): {
     return { valid: false, error: 'model must be a string if provided' };
   }
 
+  if (cfg.dropImages !== undefined && typeof cfg.dropImages !== 'boolean') {
+    return { valid: false, error: 'dropImages must be a boolean if provided' };
+  }
+
   if (cfg.headers !== undefined && (typeof cfg.headers !== 'object' || cfg.headers === null)) {
     return { valid: false, error: 'headers must be an object if provided' };
   }

@@ -21,6 +21,8 @@ export interface UpstreamConfig {
   model?: string;
   /** Additional default headers. */
   headers?: Record<string, string>;
+  /** If true, drop image/file parts from user messages (for text-only models). */
+  dropImages?: boolean;
 }
 
 export interface ConfigFile {

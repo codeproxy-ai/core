@@ -205,3 +205,88 @@ describe('createResponsesFetch', () => {
     expect(body.error.message).toContain('bad key');
   });
 });
+
+  it('drops image_url parts from user messages when dropImages is true', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-123',
+          object: 'chat.completion',
+          created: 1677652288,
+          model: 'deepseek-v4-flash',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://api.deepseek.com/v1/chat/completions',
+      fetch: upstream,
+      dropImages: true,
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'deepseek-v4-flash',
+        input: [
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'desc' }, { type: 'input_image', image_url: 'https://example.com/img.png' }] },
+        ],
+      }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    const userMsg = upstreamBody.messages.find((m: any) => m.role === 'user');
+    // Should contain only the text part, image dropped
+    expect(Array.isArray(userMsg.content)).toBe(false);
+    expect(userMsg.content).toBe('desc');
+  });
+
+  it('drops image_url parts from assistant messages when dropImages is true', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-456',
+          object: 'chat.completion',
+          created: 1677652288,
+          model: 'deepseek-v4-flash',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://my-proxy.com/v1/chat/completions',
+      fetch: upstream,
+      dropImages: true,
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'test-model',
+        input: [
+          { type: 'message', role: 'user', content: 'hello' },
+          { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'sure' }, { type: 'input_image', image_url: 'data:image/png;base64,ABC' }] },
+        ],
+      }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    const assistantMsg = upstreamBody.messages.find((m: any) => m.role === 'assistant');
+    // Assistant should have plain text, image dropped
+    expect(typeof assistantMsg.content).toBe('string');
+    expect(assistantMsg.content).toBe('sure');
+  });

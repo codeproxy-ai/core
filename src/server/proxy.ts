@@ -83,6 +83,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     apiVersion: options.apiVersion,
     model: options.model,
     defaultHeaders: options.defaultHeaders,
+    dropImages: options.dropImages,
     fetch: capturingFetch,
     passthroughFetch: async () =>
       new Response(JSON.stringify({ error: { message: 'Not found' } }), {
