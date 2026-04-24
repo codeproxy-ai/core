@@ -235,6 +235,26 @@ describe('translateRequest (Responses -> Zai)', () => {
     ]);
   });
 
+  it('drops image/file parts when dropImages is set (e.g. DeepSeek)', () => {
+    const { request } = translateRequest({
+      model: 'deepseek-chat',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'what is this?' },
+            { type: 'input_image', image_url: 'data:image/png;base64,AAA' },
+            { type: 'input_file', file_data: 'CCC', mime_type: 'application/pdf' },
+          ],
+        },
+      ],
+    }, { defaultMaxTokens: 4096, dropImages: true });
+    expect(request.messages).toEqual([
+      { role: 'user', content: 'what is this?' },
+    ]);
+  });
+
   it('translates input_file to image_url data URL', () => {
     const { request } = translateRequest({
       model: 'zai-gpt-4',

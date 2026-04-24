@@ -179,7 +179,7 @@ async function loadConfigAndApplyOverrides(
     apiVersion: overrides.apiVersion || upstreamConfig.apiVersion,
     model: overrides.model || upstreamConfig.model,
     host: overrides.host || upstreamConfig.host,
-    port: overrides.port !== undefined ? overrides.port : (upstreamConfig.port ? Number(upstreamConfig.port) : undefined),
+    port: overrides.port !== undefined ? overrides.port : ((config as any).port ? Number((config as any).port) : upstreamConfig.port ? Number(upstreamConfig.port) : undefined),
     cors: overrides.cors,
   };
 
