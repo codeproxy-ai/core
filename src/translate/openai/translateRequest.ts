@@ -72,6 +72,9 @@ export function translateRequest(
     options.defaultMaxTokens;
   if (typeof maxTokens === 'number') request.max_tokens = maxTokens;
 
+  const responseFormat = mapResponseFormat(data.text);
+  if (responseFormat) request.response_format = responseFormat;
+
   const tools = mapTools(data.tools ?? [], options.stripStrict);
   if (tools.length) {
     request.tools = tools;
@@ -408,6 +411,26 @@ function mapToolChoice(choice: ResponsesToolChoice): OpenAiChatToolChoice | unde
     }
     return choice as OpenAiChatToolChoice;
   }
+  return undefined;
+}
+
+function mapResponseFormat(text: unknown): Record<string, unknown> | undefined {
+  if (!text || typeof text !== 'object') return undefined;
+  const fmt = (text as { format?: unknown }).format;
+  if (!fmt || typeof fmt !== 'object') return undefined;
+  const f = fmt as { type?: string; name?: string; schema?: unknown; strict?: boolean };
+  if (f.type === 'json_schema') {
+    if (!f.schema) return undefined;
+    return {
+      type: 'json_schema',
+      json_schema: {
+        name: f.name ?? 'response',
+        schema: f.schema,
+        ...(typeof f.strict === 'boolean' ? { strict: f.strict } : {}),
+      },
+    };
+  }
+  if (f.type === 'json_object') return { type: 'json_object' };
   return undefined;
 }
 
