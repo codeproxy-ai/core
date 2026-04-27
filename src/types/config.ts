@@ -23,6 +23,10 @@ export interface UpstreamConfig {
   headers?: Record<string, string>;
   /** If true, drop image/file parts from user messages (for text-only models). */
   dropImages?: boolean;
+  /** Reasoning effort for openai-chat upstreams (low/medium/high). */
+  reasoning_effort?: string;
+  /** Thinking configuration for anthropic or openai-chat upstreams. */
+  thinking?: unknown;
 }
 
 export interface ConfigFile {
@@ -32,6 +36,10 @@ export interface ConfigFile {
   currentUpstream: string;
   /** List of available upstream configs. */
   upstreams: Record<string, UpstreamConfig>;
+  /** Default reasoning effort for openai-chat upstreams (low/medium/high). */
+  reasoning_effort?: string;
+  /** Default thinking configuration for anthropic or openai-chat upstreams. */
+  thinking?: unknown;
 }
 
 /** Default config file names to search for. */

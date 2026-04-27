@@ -39,6 +39,10 @@ export interface CreateResponsesFetchOptions {
   dropImages?: boolean;
   /** Optional callback to receive cache statistics. */
   onCacheStats?: (stats: CacheStats) => void;
+  /** Override reasoning_effort sent to the upstream model (OpenAI Chat / Anthropic). */
+  reasoning_effort?: string;
+  /** Override thinking configuration sent to the upstream model. */
+  thinking?: unknown;
 }
 
 export function createResponsesFetch(options: CreateResponsesFetchOptions): typeof fetch {
@@ -170,7 +174,7 @@ async function handleResponses(
 ): Promise<Response> {
   const streaming = request.stream ?? false;
   const resolvedUrl = normalizeBaseUrl(options.baseUrl, format);
-  const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl, dropImages);
+  const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl, dropImages, options.reasoning_effort, options.thinking);
   const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
 
   const upstream = await baseFetch(resolvedUrl, {
@@ -211,15 +215,39 @@ function buildRequestMetadata(request: ResponsesRequest, temperature?: number, t
   return { temperature, top_p, tools: (request.tools as unknown[]) ?? [], tool_choice: request.tool_choice, store: request.store ?? true, metadata: (request.metadata as Record<string, unknown>) ?? {} };
 }
 
-function buildUpstreamBody(request: ResponsesRequest, format: UpstreamFormat, streaming: boolean, baseUrl: string, dropImages?: boolean): { upstreamBody: unknown; requestMetadata: ReturnType<typeof buildRequestMetadata> } {
+function buildUpstreamBody(
+  request: ResponsesRequest,
+  format: UpstreamFormat,
+  streaming: boolean,
+  baseUrl: string,
+  dropImages?: boolean,
+  reasoning_effort?: string,
+  thinking?: unknown,
+): { upstreamBody: unknown; requestMetadata: ReturnType<typeof buildRequestMetadata> } {
   if (format === 'anthropic') {
     const { request: ar } = anthropic.translateRequest(request);
     ar.stream = streaming;
+    if (thinking !== undefined) {
+      (ar as Record<string, unknown>).thinking = thinking;
+    } else if (reasoning_effort) {
+      const effort = reasoning_effort.toLowerCase();
+      if (effort === 'minimal') {
+        (ar as Record<string, unknown>).thinking = { type: 'disabled' };
+      } else if (effort === 'low') {
+        (ar as Record<string, unknown>).thinking = { type: 'enabled', budget_tokens: 4096 };
+      } else if (effort === 'medium') {
+        (ar as Record<string, unknown>).thinking = { type: 'enabled', budget_tokens: 16384 };
+      } else if (effort === 'high') {
+        (ar as Record<string, unknown>).thinking = { type: 'enabled', budget_tokens: 32768 };
+      }
+    }
     return { upstreamBody: ar, requestMetadata: buildRequestMetadata(request, ar.temperature, ar.top_p) };
   }
   const { request: cr } = openai.translateRequest(request, { dropImages: dropImages });
   cr.stream = streaming;
   if (streaming) (cr as Record<string, unknown>).stream_options = { include_usage: true };
+  if (reasoning_effort !== undefined) (cr as Record<string, unknown>).reasoning_effort = reasoning_effort;
+  if (thinking !== undefined) (cr as Record<string, unknown>).thinking = thinking;
   return { upstreamBody: cr, requestMetadata: buildRequestMetadata(request, cr.temperature, cr.top_p) };
 }
 

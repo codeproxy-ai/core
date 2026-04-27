@@ -363,3 +363,191 @@ describe('createResponsesFetch', () => {
     expect(res.status).toBe(200);
     expect(capturedUrl).toBe('https://integrate.api.nvidia.com/v1/chat/completions');
   });
+
+  it('injects reasoning_effort for openai-chat upstream', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-r1', object: 'chat.completion', created: 1, model: 'deepseek-v4-pro',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://api.deepseek.com/v1',
+      fetch: upstream,
+      reasoning_effort: 'high',
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'deepseek-v4-pro', input: 'hello' }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    expect(upstreamBody.reasoning_effort).toBe('high');
+  });
+
+  it('injects thinking for openai-chat upstream', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-t1', object: 'chat.completion', created: 1, model: 'glm-5.1',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      fetch: upstream,
+      thinking: { type: 'enabled' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'glm-5.1', input: 'hello' }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    expect(upstreamBody.thinking).toEqual({ type: 'enabled' });
+  });
+
+  it('injects thinking:disabled for anthropic upstream when reasoning_effort is minimal', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-sonnet-4-7',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1/messages',
+      fetch: upstream,
+      reasoning_effort: 'minimal',
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    expect(upstreamBody.thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('injects thinking:enabled with budget for anthropic upstream when reasoning_effort is high', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'msg_2', type: 'message', role: 'assistant', model: 'claude-sonnet-4-7',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1/messages',
+      fetch: upstream,
+      reasoning_effort: 'high',
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    expect(upstreamBody.thinking).toEqual({ type: 'enabled', budget_tokens: 32768 });
+  });
+
+  it('injects raw thinking config for anthropic upstream when thinking is provided (overrides reasoning_effort)', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'msg_3', type: 'message', role: 'assistant', model: 'claude-sonnet-4-7',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1/messages',
+      fetch: upstream,
+      reasoning_effort: 'high',
+      thinking: { type: 'disabled' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    // thinking should win over reasoning_effort
+    expect(upstreamBody.thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('does not inject reasoning_effort when not configured', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-nr', object: 'chat.completion', created: 1, model: 'deepseek-v4-flash',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://api.deepseek.com/v1',
+      fetch: upstream,
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'deepseek-v4-flash', input: 'hello' }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    expect(upstreamBody.reasoning_effort).toBeUndefined();
+    expect(upstreamBody.thinking).toBeUndefined();
+  });

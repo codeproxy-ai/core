@@ -186,6 +186,8 @@ async function loadConfigAndApplyOverrides(
     port: overrides.port !== undefined ? overrides.port : ((config as any).port ? Number((config as any).port) : upstreamConfig.port ? Number(upstreamConfig.port) : undefined),
     dropImages: upstreamConfig.dropImages,
     cors: overrides.cors,
+    reasoning_effort: upstreamConfig.reasoning_effort ?? (config as any).reasoning_effort,
+    thinking: upstreamConfig.thinking ?? (config as any).thinking,
   };
 
   const defaultHeaders: Record<string, string> = {};
