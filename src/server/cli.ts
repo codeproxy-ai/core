@@ -176,6 +176,10 @@ async function loadConfigAndApplyOverrides(
   console.log(`Loaded config from: ${configPath}`);
   console.log(`Current upstream: ${config.currentUpstream}${upstreamConfig.format ? ` (${upstreamConfig.format})` : ''}`);
   console.log(`Model: ${upstreamConfig.model || "(not set)"}`);
+  const mergedHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
+  if (upstreamConfig.headers) Object.assign(mergedHeaders, upstreamConfig.headers);
+  if (mergedHeaders.authorization) mergedHeaders.authorization = "\"[REDACTED]\"";
+  if (Object.keys(mergedHeaders).length > 0) console.log(`Headers: ${JSON.stringify(mergedHeaders)}`);
 
   const options: StartProxyOptions = {
     upstreamFormat: upstreamConfig.format,
