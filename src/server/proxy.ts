@@ -101,7 +101,12 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         `billed=${billedTokens}`,
       ];
       if (stats.cacheCreationTokens > 0) parts.push(`cache_creation=${stats.cacheCreationTokens}`);
-      logger?.log(`[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${durationMs}ms) [${parts.join(', ')}]`);
+      const logMsg = `[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${durationMs}ms) [${parts.join(', ')}]`;
+      if (stats.cachedTokens === 0 && billedTokens > 0) {
+        logger?.warn(`⚠️ NO CACHE -- ${logMsg}`);
+      } else {
+        logger?.log(logMsg);
+      }
 
       if (options.onCacheStats) {
         options.onCacheStats({
