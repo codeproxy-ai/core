@@ -34,6 +34,8 @@ export interface ConfigFile {
   version: string;
   /** Current upstream config to use. */
   currentUpstream: string;
+  /** Default headers applied to all upstreams. Can be overridden by upstream-specific headers. */
+  headers?: Record<string, string>;
   /** List of available upstream configs. */
   upstreams: Record<string, UpstreamConfig>;
   /** Default reasoning effort for openai-chat upstreams (low/medium/high). */

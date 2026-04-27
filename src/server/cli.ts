@@ -190,7 +190,7 @@ async function loadConfigAndApplyOverrides(
     thinking: upstreamConfig.thinking ?? (config as any).thinking,
   };
 
-  const defaultHeaders: Record<string, string> = {};
+  const defaultHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
   if (upstreamConfig.headers) {
     Object.assign(defaultHeaders, upstreamConfig.headers);
   }
