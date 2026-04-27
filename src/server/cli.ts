@@ -176,6 +176,8 @@ async function loadConfigAndApplyOverrides(
   console.log(`Loaded config from: ${configPath}`);
   console.log(`Current upstream: ${config.currentUpstream}${upstreamConfig.format ? ` (${upstreamConfig.format})` : ''}`);
   console.log(`Model: ${upstreamConfig.model || "(not set)"}`);
+  const mergedEffort = upstreamConfig.reasoning_effort ?? (config as any).reasoning_effort;
+  if (mergedEffort) console.log(`Reasoning effort: ${mergedEffort}`);
   const mergedHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
   if (upstreamConfig.headers) Object.assign(mergedHeaders, upstreamConfig.headers);
   if (mergedHeaders.authorization) mergedHeaders.authorization = "\"[REDACTED]\"";
