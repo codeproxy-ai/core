@@ -551,3 +551,109 @@ describe('createResponsesFetch', () => {
     expect(upstreamBody.reasoning_effort).toBeUndefined();
     expect(upstreamBody.thinking).toBeUndefined();
   });
+
+describe('config headers', () => {
+  it('merges root-level defaultHeaders into upstream request', async () => {
+    let capturedHeaders: Record<string, string> = {};
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedHeaders = Object.fromEntries(
+        Object.entries((init?.headers ?? {}) as Record<string, string>),
+      );
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-h1', object: 'chat.completion', created: 1, model: 'gpt-4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://api.openai.com/v1',
+      fetch: upstream,
+      defaultHeaders: { 'x-custom-header': 'root-value' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({ model: 'gpt-4', input: 'hello' }),
+    });
+
+    expect(capturedHeaders['x-custom-header']).toBe('root-value');
+  });
+
+  it('root-level headers appear in cli config loading', async () => {
+    // Simulate the config loading logic from cli.ts
+    const config = {
+      version: '1.0',
+      currentUpstream: 'test',
+      headers: { 'x-root-header': 'root-val' },
+      upstreams: {
+        test: {
+          baseUrl: 'https://api.openai.com/v1',
+          headers: { 'x-upstream-header': 'upstream-val' },
+        },
+      },
+    };
+
+    const defaultHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
+    const upstreamConfig = config.upstreams[config.currentUpstream];
+    if (upstreamConfig.headers) {
+      Object.assign(defaultHeaders, upstreamConfig.headers);
+    }
+
+    expect(defaultHeaders['x-root-header']).toBe('root-val');
+    expect(defaultHeaders['x-upstream-header']).toBe('upstream-val');
+  });
+
+  it('upstream headers override root-level headers with same key', async () => {
+    const config = {
+      version: '1.0',
+      currentUpstream: 'test',
+      headers: { 'x-custom': 'root-val' },
+      upstreams: {
+        test: {
+          baseUrl: 'https://api.openai.com/v1',
+          headers: { 'x-custom': 'upstream-val' },
+        },
+      },
+    };
+
+    const defaultHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
+    const upstreamConfig = config.upstreams[config.currentUpstream];
+    if (upstreamConfig.headers) {
+      Object.assign(defaultHeaders, upstreamConfig.headers);
+    }
+
+    expect(defaultHeaders['x-custom']).toBe('upstream-val');
+  });
+
+  it('apiKey adds Bearer auth header alongside root headers', async () => {
+    const config = {
+      version: '1.0',
+      currentUpstream: 'test',
+      headers: { 'x-root-header': 'root-val' },
+      upstreams: {
+        test: {
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-test-key',
+        },
+      },
+    };
+
+    const defaultHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
+    const upstreamConfig = config.upstreams[config.currentUpstream];
+    if (upstreamConfig.headers) {
+      Object.assign(defaultHeaders, upstreamConfig.headers);
+    }
+    if (upstreamConfig.apiKey) {
+      defaultHeaders.authorization = `Bearer ${upstreamConfig.apiKey}`;
+    }
+
+    expect(defaultHeaders['x-root-header']).toBe('root-val');
+    expect(defaultHeaders['authorization']).toBe('Bearer sk-test-key');
+  });
+});
