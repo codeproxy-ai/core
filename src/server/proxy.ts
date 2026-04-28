@@ -114,7 +114,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       const color = ratio < 0.8 ? '[32m' : ratio < 1.5 ? '[33m' : '[31m';
       const reset = '[0m';
       const logMsg = `[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${color}${durationMs}ms${reset} avg=${Math.round(avg)}ms) [${parts.join(', ')}]`;
-      if (stats.cachedTokens === 0 && billedTokens > 0) {
+      if (stats.cachedTokens < 1024 && billedTokens > 0) {
         logger?.warn(`⚠️ NO CACHE -- ${logMsg}`);
       } else {
         logger?.log(logMsg);
