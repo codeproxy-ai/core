@@ -1,4 +1,4 @@
-# responses-api-translator
+# responses-proxy
 
 A zero-dependency TypeScript library that translates between the **OpenAI
 Responses API** and upstream AI APIs (Anthropic Messages, OpenAI-compatible
@@ -12,7 +12,7 @@ header) on your outbound call and the wrapper forwards it upstream.
 ## Install
 
 ```bash
-npm install responses-api-translator
+npm install responses-proxy
 ```
 
 ## Concepts
@@ -31,7 +31,7 @@ npm install responses-api-translator
 ### Plain `fetch`
 
 ```ts
-import { createResponsesFetch, parseSseStream } from 'responses-api-translator';
+import { createResponsesFetch, parseSseStream } from 'responses-proxy';
 
 const apiFetch = createResponsesFetch({
   baseUrl: 'https://api.anthropic.com/v1', // inferred → anthropic, appends /messages
@@ -71,7 +71,7 @@ for await (const msg of parseSseStream(stream.body!)) {
 
 ```ts
 import OpenAI from 'openai';
-import { createResponsesFetch } from 'responses-api-translator';
+import { createResponsesFetch } from 'responses-proxy';
 
 const openai = new OpenAI({
   apiKey: API_KEY,
@@ -125,14 +125,14 @@ Behaviour:
 
 ```bash
 # Auto-infer upstreamFormat from --base-url
-npx responses-api-translator --base-url https://api.anthropic.com/v1
+npx responses-proxy --base-url https://api.anthropic.com/v1
 
 # Explicit format
-npx responses-api-translator --upstream-format openai-chat \
+npx responses-proxy --upstream-format openai-chat \
   --base-url https://api.openai.com/v1
 
 # From config file
-npx responses-api-translator --config ./config.json
+npx responses-proxy --config ./config.json
 ```
 
 Point any Responses-API client at `http://127.0.0.1:8787`:
@@ -188,7 +188,7 @@ it is appended automatically based on the format.
 ### Programmatic
 
 ```ts
-import { startProxy } from 'responses-api-translator/server';
+import { startProxy } from 'responses-proxy/server';
 
 const proxy = await startProxy({
   baseUrl: 'https://api.anthropic.com/v1', // appends /messages
@@ -201,7 +201,7 @@ await proxy.close();
 ## Pure translation (no HTTP)
 
 ```ts
-import { translate } from 'responses-api-translator';
+import { translate } from 'responses-proxy';
 
 // Responses → Anthropic
 const { request } = translate.anthropic.translateRequest({
@@ -225,7 +225,7 @@ for await (const evt of translate.openai.translateStream(upstream.body!, {
 ## SSE helpers
 
 ```ts
-import { parseSseStream, encodeSseEvent } from 'responses-api-translator';
+import { parseSseStream, encodeSseEvent } from 'responses-proxy';
 ```
 
 ## Runtime requirements

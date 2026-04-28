@@ -1,5 +1,5 @@
 /**
- * Configuration file format for responses-api-translator.
+ * Configuration file format for responses-proxy.
  */
 
 export type UpstreamFormat = 'anthropic' | 'openai-chat';
@@ -46,10 +46,10 @@ export interface ConfigFile {
 
 /** Default config file names to search for. */
 export const CONFIG_FILE_NAMES = [
-  'responses-api-translator.config.json',
-  'responses-api-translator.config.js',
-  'responses-api-translator.config.mjs',
-  'responses-api-translator.config.ts',
-  '.responses-api-translator.json',
-  '.responses-api-translator.js',
+  'responses-proxy.config.json',
+  'responses-proxy.config.js',
+  'responses-proxy.config.mjs',
+  'responses-proxy.config.ts',
+  '.responses-proxy.json',
+  '.responses-proxy.js',
 ];

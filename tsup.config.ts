@@ -4,8 +4,6 @@ export default defineConfig([
   {
     entry: {
       index: 'src/index.ts',
-      'providers/claude/index': 'src/providers/claude/index.ts',
-      'providers/zai/index': 'src/providers/zai/index.ts',
       'server/index': 'src/server/index.ts',
     },
     format: ['esm', 'cjs'],

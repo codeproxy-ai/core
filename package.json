@@ -1,5 +1,5 @@
 {
-  "name": "responses-api-translator",
+  "name": "responses-proxy",
   "version": "0.2.0",
   "description": "Translate between OpenAI Responses API and third-party AI upstreams (Anthropic, OpenAI Chat, etc.) in pure TypeScript. Browser-compatible.",
   "keywords": [
@@ -7,7 +7,7 @@
     "responses-api",
     "anthropic",
     "claude",
-    "translator",
+    "proxy",
     "sse",
     "browser"
   ],
@@ -55,6 +55,6 @@
     "node": ">=18"
   },
   "bin": {
-    "responses-api-translator": "dist/server/cli.js"
+    "responses-proxy": "dist/server/cli.js"
   }
 }

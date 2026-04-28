@@ -7,12 +7,12 @@ import { resolve, dirname } from 'node:path';
 import type { ConfigFile, UpstreamConfig } from '../types/config.js';
 
 const CONFIG_FILE_NAMES = [
-  'responses-api-translator.config.json',
-  'responses-api-translator.config.js',
-  'responses-api-translator.config.mjs',
-  'responses-api-translator.config.ts',
-  '.responses-api-translator.json',
-  '.responses-api-translator.js',
+  'responses-proxy.config.json',
+  'responses-proxy.config.js',
+  'responses-proxy.config.mjs',
+  'responses-proxy.config.ts',
+  '.responses-proxy.json',
+  '.responses-proxy.js',
 ] as const;
 
 /**
