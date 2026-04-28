@@ -39,6 +39,14 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
   const cors = options.cors ?? true;
   const logger = options.logger === null ? null : (options.logger ?? console);
 
+  // Rolling average for request duration coloring (last 50 requests)
+  const durationHistory: number[] = [];
+  function updateRollingAverage(ms: number) {
+    durationHistory.push(ms);
+    if (durationHistory.length > 50) durationHistory.shift();
+    return durationHistory.reduce((a, b) => a + b, 0) / durationHistory.length;
+  }
+
   const requestInfo = { method: '', url: '', startTime: 0 };
 
   const upstreamCapture: {
@@ -101,9 +109,11 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         `billed=${billedTokens}`,
       ];
       if (stats.cacheCreationTokens > 0) parts.push(`cache_creation=${stats.cacheCreationTokens}`);
-      const color = durationMs < 3000 ? '[32m' : durationMs < 10000 ? '[33m' : '[31m';
+      const avg = updateRollingAverage(durationMs);
+      const ratio = avg > 0 ? durationMs / avg : 1;
+      const color = ratio < 0.8 ? '[32m' : ratio < 1.5 ? '[33m' : '[31m';
       const reset = '[0m';
-      const logMsg = `[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${color}${durationMs}ms${reset}) [${parts.join(', ')}]`;
+      const logMsg = `[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${color}${durationMs}ms${reset} avg=${Math.round(avg)}ms) [${parts.join(', ')}]`;
       if (stats.cachedTokens === 0 && billedTokens > 0) {
         logger?.warn(`⚠️ NO CACHE -- ${logMsg}`);
       } else {
