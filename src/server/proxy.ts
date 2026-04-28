@@ -47,7 +47,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     return durationHistory.reduce((a, b) => a + b, 0) / durationHistory.length;
   }
 
-  const requestInfo = { method: '', url: '', startTime: 0 };
+  const requestInfo = { method: '', url: '', startTime: 0, resultLog: '' as string };
 
   const upstreamCapture: {
     request?: { url: string; method: string; headers: Record<string, string>; body: unknown };
@@ -111,14 +111,12 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       if (stats.cacheCreationTokens > 0) parts.push(`cache_creation=${stats.cacheCreationTokens}`);
       const avg = updateRollingAverage(durationMs);
       const ratio = avg > 0 ? durationMs / avg : 1;
-      const color = ratio < 0.8 ? '[32m' : ratio < 1.5 ? '[33m' : '[31m';
-      const reset = '[0m';
+      const color = ratio < 0.8 ? '\x1b[32m' : ratio < 1.5 ? '\x1b[33m' : '\x1b[31m';
+      const reset = '\x1b[0m';
       const logMsg = `[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${color}${durationMs}ms${reset} avg=${Math.round(avg)}ms) [${parts.join(', ')}]`;
-      if (stats.cachedTokens < 1024 && billedTokens > 0) {
-        logger?.warn(`⚠️ NO CACHE -- ${logMsg}`);
-      } else {
-        logger?.log(logMsg);
-      }
+      requestInfo.resultLog = stats.cachedTokens < 1024 && billedTokens > 0
+        ? `⚠️ NO CACHE -- ${logMsg}`
+        : logMsg;
 
       if (options.onCacheStats) {
         options.onCacheStats({
@@ -145,6 +143,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         method: req.method ?? 'POST',
         url: req.url ?? '/',
         upstreamCapture,
+        requestInfo,
       });
     } catch (err) {
       logger?.error('[proxy-error]', err);
@@ -197,6 +196,7 @@ async function handleRequest(
       request?: { url: string; method: string; headers: Record<string, string>; body: unknown };
       response?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
     };
+    requestInfo: { resultLog: string };
   },
 ): Promise<void> {
   if (opts.cors) setCorsHeaders(res);
@@ -223,13 +223,39 @@ async function handleRequest(
   }
 
   const requestBodyText = body ? body.toString('utf8') : undefined;
+
+  // Dynamic status line with live timer
+  const requestStart = Date.now();
+  let dynTimer: ReturnType<typeof setInterval> | undefined;
+  if (opts.logger) {
+    const updateLine = () => {
+      const elapsed = ((Date.now() - requestStart) / 1000).toFixed(1);
+      process.stdout.write(`\r--> ${method} ${urlPath}  [${elapsed}s]`);
+    };
+    updateLine();
+    dynTimer = setInterval(updateLine, 150);
+  }
+
   const response = await opts.apiFetch(`http://local${urlPath}`, {
     method,
     headers,
     body: body ? new Uint8Array(body) : undefined,
   });
 
+  // Consume response body so onCacheStats fires (for streaming responses)
   const responseBodyText = response.body ? await response.clone().text() : '';
+
+  // Stop the dynamic timer and write final status on the same line
+  if (dynTimer) clearInterval(dynTimer);
+  if (opts.logger) {
+    if (response.status >= 400) {
+      process.stdout.write(`\r<-- ${response.status} ${method} ${urlPath}  (${Date.now() - requestStart}ms)\n`);
+    } else if (opts.requestInfo.resultLog) {
+      process.stdout.write(`\r${opts.requestInfo.resultLog}\n`);
+    } else {
+      process.stdout.write(`\r<-- ${response.status} ${method} ${urlPath}  (${Date.now() - requestStart}ms)\n`);
+    }
+  }
   if (response.status >= 400) {
     try {
       const filePath = saveErrorDump({
