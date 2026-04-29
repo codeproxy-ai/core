@@ -59,6 +59,36 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     return durationHistory.reduce((a, b) => a + b, 0) / durationHistory.length;
   }
 
+  // Centralized status line for all active requests
+  const activeRequests = new Map<string, { method: string; url: string; startTime: number }>();
+  let statusTimerId: ReturnType<typeof setInterval> | null = null;
+
+  function drawStatusLine() {
+    if (activeRequests.size === 0) return;
+    const parts = Array.from(activeRequests.entries()).map(([, req]) => {
+      const elapsed = Date.now() - req.startTime;
+      return `${req.method} ${req.url} [${fmtDuration(elapsed)}]`;
+    });
+    process.stdout.write(`\r\x1b[K--> ${parts.join(', ')}`);
+  }
+
+  const requestTracker = {
+    add(method: string, url: string): string {
+      const id = `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      activeRequests.set(id, { method, url, startTime: Date.now() });
+      drawStatusLine();
+      if (!statusTimerId) statusTimerId = setInterval(drawStatusLine, 150);
+      return id;
+    },
+    remove(id: string) {
+      activeRequests.delete(id);
+      if (activeRequests.size === 0) {
+        process.stdout.write('\r\x1b[K');
+        if (statusTimerId) { clearInterval(statusTimerId); statusTimerId = null; }
+      }
+    },
+  };
+
   const requestInfo = { method: '', url: '', startTime: 0, resultLog: '' as string };
 
   const upstreamCapture: {
@@ -156,6 +186,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         url: req.url ?? '/',
         upstreamCapture,
         requestInfo,
+        requestTracker,
       });
     } catch (err) {
       logger?.error('[proxy-error]', err);
@@ -209,6 +240,7 @@ async function handleRequest(
       response?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
     };
     requestInfo: { resultLog: string };
+    requestTracker: { add: (method: string, url: string) => string; remove: (id: string) => void };
   },
 ): Promise<void> {
   if (opts.cors) setCorsHeaders(res);
@@ -237,78 +269,76 @@ async function handleRequest(
   const requestBodyText = body ? body.toString('utf8') : undefined;
 
   const requestStart = Date.now();
-  let dynTimer: ReturnType<typeof setInterval> | undefined;
-  if (opts.logger) {
-    const updateLine = () => {
-      process.stdout.write(`\r--> ${method} ${urlPath}  [${fmtDuration(Date.now() - requestStart)}]`);
-    };
-    updateLine();
-    dynTimer = setInterval(updateLine, 150);
-  }
+  const requestId = opts.requestTracker.add(method, urlPath);
 
-  const response = await opts.apiFetch(`http://local${urlPath}`, {
-    method,
-    headers,
-    body: body ? new Uint8Array(body) : undefined,
-  });
+  try {
+    const response = await opts.apiFetch(`http://local${urlPath}`, {
+      method,
+      headers,
+      body: body ? new Uint8Array(body) : undefined,
+    });
 
-  // Consume response body so onCacheStats fires (for streaming responses)
-  const responseBodyText = response.body ? await response.clone().text() : '';
+    // Consume response body so onCacheStats fires (for streaming responses)
+    const responseBodyText = response.body ? await response.clone().text() : '';
 
-  // Stop the dynamic timer and write final status on the same line
-  if (dynTimer) clearInterval(dynTimer);
-  if (opts.logger) {
+    // Remove from active requests and write final result
+    opts.requestTracker.remove(requestId);
+    if (opts.logger) {
+      if (response.status >= 400) {
+        process.stdout.write(`\r\x1b[K<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
+      } else if (opts.requestInfo.resultLog) {
+        process.stdout.write(`\r\x1b[K${opts.requestInfo.resultLog}\n`);
+      } else {
+        process.stdout.write(`\r\x1b[K<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
+      }
+    }
     if (response.status >= 400) {
-      process.stdout.write(`\r<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
-    } else if (opts.requestInfo.resultLog) {
-      process.stdout.write(`\r${opts.requestInfo.resultLog}\n`);
-    } else {
-      process.stdout.write(`\r<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
+      try {
+        const filePath = saveErrorDump({
+          method: opts.method,
+          url: opts.url,
+          clientRequest: {
+            headers,
+            body: tryParseJson(requestBodyText ?? ''),
+          },
+          upstreamRequest: opts.upstreamCapture.request,
+          upstreamResponse: opts.upstreamCapture.response,
+          proxyResponse: {
+            status: response.status,
+            headers: headersToObject(response.headers),
+            body: tryParseJson(responseBodyText),
+          },
+        });
+        opts.logger?.error(`[proxy-failure] full exchange saved to ${filePath}`);
+      } catch (dumpErr) {
+        opts.logger?.error('[proxy-failure] failed to persist error dump', dumpErr);
+      }
     }
-  }
-  if (response.status >= 400) {
-    try {
-      const filePath = saveErrorDump({
-        method: opts.method,
-        url: opts.url,
-        clientRequest: {
-          headers,
-          body: tryParseJson(requestBodyText ?? ''),
-        },
-        upstreamRequest: opts.upstreamCapture.request,
-        upstreamResponse: opts.upstreamCapture.response,
-        proxyResponse: {
-          status: response.status,
-          headers: headersToObject(response.headers),
-          body: tryParseJson(responseBodyText),
-        },
-      });
-      opts.logger?.error(`[proxy-failure] full exchange saved to ${filePath}`);
-    } catch (dumpErr) {
-      opts.logger?.error('[proxy-failure] failed to persist error dump', dumpErr);
+
+    const outHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => {
+      outHeaders[key] = value;
+    });
+    if (opts.cors) Object.assign(outHeaders, corsHeaders());
+
+    res.writeHead(response.status, outHeaders);
+
+    if (!response.body) {
+      res.end();
+      return;
     }
+
+    const nodeStream = Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>);
+    nodeStream.pipe(res);
+    await new Promise<void>((resolve, reject) => {
+      nodeStream.once('end', resolve);
+      nodeStream.once('error', reject);
+      res.once('close', resolve);
+    });
+  } catch (err) {
+    opts.requestTracker.remove(requestId);
+    throw err;
   }
-
-  const outHeaders: Record<string, string> = {};
-  response.headers.forEach((value, key) => {
-    outHeaders[key] = value;
-  });
-  if (opts.cors) Object.assign(outHeaders, corsHeaders());
-
-  res.writeHead(response.status, outHeaders);
-
-  if (!response.body) {
-    res.end();
-    return;
-  }
-
-  const nodeStream = Readable.fromWeb(response.body as unknown as import('node:stream/web').ReadableStream<Uint8Array>);
-  nodeStream.pipe(res);
-  await new Promise<void>((resolve, reject) => {
-    nodeStream.once('end', resolve);
-    nodeStream.once('error', reject);
-    res.once('close', resolve);
-  });
 }
 
 function readIncomingBody(req: IncomingMessage): Promise<Buffer> {
