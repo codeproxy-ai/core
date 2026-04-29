@@ -7,6 +7,18 @@ import http, { type IncomingMessage, type Server, type ServerResponse } from 'no
 import { Readable } from 'node:stream';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+
+function fmtTime(d: Date): string {
+  return d.toLocaleTimeString('en-US', { hour12: false });
+}
+
+function fmtDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60000);
+  const s = Math.round((ms % 60000) / 1000);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 import {
   createResponsesFetch,
   type CreateResponsesFetchOptions,
@@ -46,6 +58,36 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     if (durationHistory.length > 50) durationHistory.shift();
     return durationHistory.reduce((a, b) => a + b, 0) / durationHistory.length;
   }
+
+  // Centralized status line for all active requests
+  const activeRequests = new Map<string, { method: string; url: string; startTime: number }>();
+  let statusTimerId: ReturnType<typeof setInterval> | null = null;
+
+  function drawStatusLine() {
+    if (activeRequests.size === 0) return;
+    const parts = Array.from(activeRequests.entries()).map(([, req]) => {
+      const elapsed = Date.now() - req.startTime;
+      return `${req.method} ${req.url} [${fmtDuration(elapsed)}]`;
+    });
+    process.stdout.write(`\r\x1b[K--> ${parts.join(', ')}`);
+  }
+
+  const requestTracker = {
+    add(method: string, url: string): string {
+      const id = `${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      activeRequests.set(id, { method, url, startTime: Date.now() });
+      drawStatusLine();
+      if (!statusTimerId) statusTimerId = setInterval(drawStatusLine, 150);
+      return id;
+    },
+    remove(id: string) {
+      activeRequests.delete(id);
+      if (activeRequests.size === 0) {
+        process.stdout.write('\r\x1b[K');
+        if (statusTimerId) { clearInterval(statusTimerId); statusTimerId = null; }
+      }
+    },
+  };
 
   const requestInfo = { method: '', url: '', startTime: 0, resultLog: '' as string };
 
@@ -113,7 +155,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       const ratio = avg > 0 ? durationMs / avg : 1;
       const color = ratio < 0.8 ? '\x1b[32m' : ratio < 1.5 ? '\x1b[33m' : '\x1b[31m';
       const reset = '\x1b[0m';
-      const logMsg = `[${new Date().toISOString()}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${color}${durationMs}ms${reset} avg=${Math.round(avg)}ms) [${parts.join(', ')}]`;
+      const logMsg = `[${fmtTime(new Date())}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${color}${fmtDuration(durationMs)}${reset} avg=${fmtDuration(Math.round(avg))}) [${parts.join(', ')}]`;
       requestInfo.resultLog = stats.cachedTokens < 1024 && billedTokens > 0
         ? `⚠️ NO CACHE -- ${logMsg}`
         : logMsg;
@@ -144,6 +186,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
         url: req.url ?? '/',
         upstreamCapture,
         requestInfo,
+        requestTracker,
       });
     } catch (err) {
       logger?.error('[proxy-error]', err);
@@ -197,6 +240,7 @@ async function handleRequest(
       response?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
     };
     requestInfo: { resultLog: string };
+    requestTracker: { add: (method: string, url: string) => string; remove: (id: string) => void };
   },
 ): Promise<void> {
   if (opts.cors) setCorsHeaders(res);
@@ -224,17 +268,8 @@ async function handleRequest(
 
   const requestBodyText = body ? body.toString('utf8') : undefined;
 
-  // Dynamic status line with live timer
   const requestStart = Date.now();
-  let dynTimer: ReturnType<typeof setInterval> | undefined;
-  if (opts.logger) {
-    const updateLine = () => {
-      const elapsed = ((Date.now() - requestStart) / 1000).toFixed(1);
-      process.stdout.write(`\r--> ${method} ${urlPath}  [${elapsed}s]`);
-    };
-    updateLine();
-    dynTimer = setInterval(updateLine, 150);
-  }
+  const requestId = opts.requestTracker.add(method, urlPath);
 
   const response = await opts.apiFetch(`http://local${urlPath}`, {
     method,
@@ -245,15 +280,15 @@ async function handleRequest(
   // Consume response body so onCacheStats fires (for streaming responses)
   const responseBodyText = response.body ? await response.clone().text() : '';
 
-  // Stop the dynamic timer and write final status on the same line
-  if (dynTimer) clearInterval(dynTimer);
+  // Remove from active requests and write final result
+  opts.requestTracker.remove(requestId);
   if (opts.logger) {
     if (response.status >= 400) {
-      process.stdout.write(`\r<-- ${response.status} ${method} ${urlPath}  (${Date.now() - requestStart}ms)\n`);
+      process.stdout.write(`\r\x1b[K<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
     } else if (opts.requestInfo.resultLog) {
-      process.stdout.write(`\r${opts.requestInfo.resultLog}\n`);
+      process.stdout.write(`\r\x1b[K${opts.requestInfo.resultLog}\n`);
     } else {
-      process.stdout.write(`\r<-- ${response.status} ${method} ${urlPath}  (${Date.now() - requestStart}ms)\n`);
+      process.stdout.write(`\r\x1b[K<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
     }
   }
   if (response.status >= 400) {
