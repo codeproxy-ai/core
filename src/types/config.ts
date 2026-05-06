@@ -23,8 +23,6 @@ export interface UpstreamConfig {
   headers?: Record<string, string>;
   /** If true, drop image/file parts from user messages (for text-only models). */
   dropImages?: boolean;
-  /** Name of another upstream to use as fallback when the latest user message contains images. */
-  fallback?: string;
   /** Reasoning effort for openai-chat upstreams (low/medium/high). */
   reasoning_effort?: string;
   /** Thinking configuration for anthropic or openai-chat upstreams. */

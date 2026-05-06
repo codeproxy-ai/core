@@ -134,7 +134,6 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     model: options.model,
     defaultHeaders: options.defaultHeaders,
     dropImages: options.dropImages,
-    fallbackUpstream: options.fallbackUpstream,
     fetch: capturingFetch,
     passthroughFetch: async () =>
       new Response(JSON.stringify({ error: { message: 'Not found' } }), {
@@ -282,26 +281,6 @@ async function handleRequest(
     // Consume response body so onCacheStats fires (for streaming responses)
     const responseBodyText = response.body ? await response.clone().text() : '';
 
-    // Save to proxy-last.json (overwrites on every request)
-    try {
-      saveLastDump({
-        method: opts.method,
-        url: opts.url,
-        clientRequest: {
-          headers,
-          body: tryParseJson(requestBodyText ?? ''),
-        },
-        upstreamRequest: opts.upstreamCapture.request,
-        proxyResponse: {
-          status: response.status,
-          headers: headersToObject(response.headers),
-          body: tryParseJson(responseBodyText),
-        },
-      });
-    } catch (dumpErr) {
-      opts.logger?.error('[proxy-last] failed to persist', dumpErr);
-    }
-
     // Remove from active requests and write final result
     opts.requestTracker.remove(requestId);
     if (opts.logger) {
@@ -446,30 +425,6 @@ function saveErrorDump(dump: {
   const payload = {
     timestamp: new Date().toISOString(),
     ...dump,
-  };
-  redactAuth(payload.clientRequest?.headers);
-  redactAuth(payload.upstreamRequest?.headers);
-  writeFileSync(filePath, JSON.stringify(payload, null, 2));
-  return filePath;
-}
-
-function saveLastDump(dump: {
-  method: string;
-  url: string;
-  clientRequest: { headers: Record<string, string>; body: unknown };
-  upstreamRequest?: { url: string; method: string; headers: Record<string, string>; body: unknown };
-  proxyResponse: { status: number; headers: Record<string, string>; body: unknown };
-}): string {
-  const dir = resolve(process.cwd(), 'logs');
-  mkdirSync(dir, { recursive: true });
-  const filePath = join(dir, 'proxy-last.json');
-  const payload = {
-    timestamp: new Date().toISOString(),
-    method: dump.method,
-    url: dump.url,
-    clientRequest: dump.clientRequest,
-    upstreamRequest: dump.upstreamRequest,
-    proxyResponse: dump.proxyResponse,
   };
   redactAuth(payload.clientRequest?.headers);
   redactAuth(payload.upstreamRequest?.headers);

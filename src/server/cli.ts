@@ -211,28 +211,6 @@ async function loadConfigAndApplyOverrides(
     options.defaultHeaders = defaultHeaders;
   }
 
-  // Resolve fallback upstream if configured
-  if (upstreamConfig.fallback) {
-    const fbConfig = config.upstreams[upstreamConfig.fallback];
-    if (fbConfig) {
-      const fbHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
-      if (fbConfig.headers) Object.assign(fbHeaders, fbConfig.headers);
-      if (fbConfig.apiKey) fbHeaders.authorization = `Bearer ${fbConfig.apiKey}`;
-      options.fallbackUpstream = {
-        baseUrl: fbConfig.baseUrl,
-        upstreamFormat: fbConfig.format as UpstreamFormat | undefined,
-        model: fbConfig.model ?? options.model,
-        defaultHeaders: Object.keys(fbHeaders).length > 0 ? fbHeaders : undefined,
-        apiVersion: fbConfig.apiVersion ?? options.apiVersion,
-        reasoning_effort: fbConfig.reasoning_effort ?? options.reasoning_effort,
-        thinking: fbConfig.thinking ?? options.thinking,
-      };
-      console.log(`Fallback upstream: ${upstreamConfig.fallback} ${fbConfig.model ? `(${fbConfig.model})` : ''}`);
-    } else {
-      console.warn(`Warning: fallback upstream "${upstreamConfig.fallback}" not found in config`);
-    }
-  }
-
   return options;
 }
 
