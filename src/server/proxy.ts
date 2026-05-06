@@ -8,6 +8,8 @@ import { Readable } from 'node:stream';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
+
 function fmtTime(d: Date): string {
   return d.toLocaleTimeString('en-US', { hour12: false });
 }
@@ -96,7 +98,18 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     response?: { status: number; statusText: string; headers: Record<string, string>; body: unknown };
   } = {};
 
-  const baseFetch = options.fetch ?? globalThis.fetch;
+  let baseFetch: any = options.fetch ?? globalThis.fetch;
+
+  // Use undici with ProxyAgent if HTTP(S)_PROXY env var is set
+  const proxyUrl = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY;
+  if (proxyUrl && !options.fetch) {
+    const agent = new ProxyAgent(proxyUrl);
+    baseFetch = (input: any, init?: any) => {
+      const merged = init ? { ...init, dispatcher: agent } : { dispatcher: agent };
+      return undiciFetch(input, merged);
+    };
+    console.log(`[proxy] Using HTTP proxy: ${proxyUrl}`);
+  }
   const capturingFetch: typeof fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
     const method = (init?.method ?? (input as Request)?.method ?? 'GET').toUpperCase();

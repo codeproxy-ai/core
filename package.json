@@ -56,5 +56,8 @@
   },
   "bin": {
     "responses-proxy": "dist/server/cli.js"
+  },
+  "dependencies": {
+    "undici": "^8.2.0"
   }
 }
