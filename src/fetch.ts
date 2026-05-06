@@ -43,6 +43,16 @@ export interface CreateResponsesFetchOptions {
   reasoning_effort?: string;
   /** Override thinking configuration sent to the upstream model. */
   thinking?: unknown;
+  /** Fallback upstream config for requests where the latest user message contains images. */
+  fallbackUpstream?: {
+    baseUrl: string;
+    upstreamFormat?: UpstreamFormat;
+    model?: string;
+    defaultHeaders?: Record<string, string>;
+    apiVersion?: string;
+    reasoning_effort?: string;
+    thinking?: unknown;
+  };
 }
 
 export function createResponsesFetch(options: CreateResponsesFetchOptions): typeof fetch {
@@ -172,6 +182,17 @@ async function handleResponses(
   signal: AbortSignal | undefined,
   dropImages?: boolean,
 ): Promise<Response> {
+  // Auto-fallback: if this upstream drops images but the latest user message has them,
+  // transparently switch to the fallback upstream.
+  if (dropImages && options.fallbackUpstream && lastMessageHasImages(request)) {
+    dropImages = false;
+    const fb = options.fallbackUpstream;
+    options = { ...options, ...fb, fallbackUpstream: undefined };
+    format = fb.upstreamFormat ?? format;
+    const fallbackModel = fb.model ? `, model: ${fb.model}` : '';
+    console.warn(`[fallback] image detected in latest message, routing to ${fb.baseUrl}${fallbackModel}`);
+  }
+
   const streaming = request.stream ?? false;
   const resolvedUrl = normalizeBaseUrl(options.baseUrl, format);
   const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl, dropImages, options.reasoning_effort, options.thinking);
@@ -318,6 +339,36 @@ async function* collectCacheStatsFromStream(events: AsyncGenerator<ResponsesStre
     yield event;
   }
   if (lastStats && onCacheStats) onCacheStats(lastStats);
+}
+
+/**
+ * Check if the last user/assistant message in the input contains image content.
+ * Only checks the latest message, not the full history, so the fallback decision
+ * is per-request based on whether the new user input has images.
+ */
+function lastMessageHasImages(request: ResponsesRequest): boolean {
+  const input = request.input;
+  if (!input || !Array.isArray(input)) return false;
+  for (let i = input.length - 1; i >= 0; i--) {
+    const item = input[i];
+    if (!item || typeof item !== 'object') continue;
+    const msg = item as Record<string, unknown>;
+    const role = msg.role;
+    const type = msg.type;
+    // Skip tool results and other non-message items
+    if (role !== 'user' && role !== 'assistant' && type !== 'message' && type !== 'agentMessage') continue;
+    if (!Array.isArray(msg.content)) return false;
+    for (const part of msg.content) {
+      if (part && typeof part === 'object') {
+        const p = part as Record<string, unknown>;
+        const partType = p.type;
+        if (partType === 'input_image' || partType === 'image' || partType === 'image_url') return true;
+      }
+    }
+    // Found the latest message, no images → done
+    return false;
+  }
+  return false;
 }
 
 // ── error helpers ──
