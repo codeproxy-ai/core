@@ -43,6 +43,16 @@ export interface CreateResponsesFetchOptions {
   reasoning_effort?: string;
   /** Override thinking configuration sent to the upstream model. */
   thinking?: unknown;
+  /** Fallback upstream for requests where the last user message contains images. */
+  fallbackUpstream?: {
+    baseUrl: string;
+    upstreamFormat?: UpstreamFormat;
+    model?: string;
+    defaultHeaders?: Record<string, string>;
+    apiVersion?: string;
+    reasoning_effort?: string;
+    thinking?: unknown;
+  };
 }
 
 export function createResponsesFetch(options: CreateResponsesFetchOptions): typeof fetch {
@@ -172,6 +182,17 @@ async function handleResponses(
   signal: AbortSignal | undefined,
   dropImages?: boolean,
 ): Promise<Response> {
+  // Auto-fallback: if this upstream drops images but the last user message has them,
+  // transparently switch to the fallback upstream.
+  if (dropImages && options.fallbackUpstream && lastUserMessageHasImage(request)) {
+    dropImages = false;
+    const fb = options.fallbackUpstream;
+    options = { ...options, ...fb, fallbackUpstream: undefined };
+    format = fb.upstreamFormat ?? format;
+    const fbModel = fb.model ? `, model: ${fb.model}` : '';
+    console.warn(`[fallback] last user message has image, routing to ${fb.baseUrl}${fbModel}`);
+  }
+
   const streaming = request.stream ?? false;
   const resolvedUrl = normalizeBaseUrl(options.baseUrl, format);
   const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl, dropImages, options.reasoning_effort, options.thinking);
@@ -318,6 +339,33 @@ async function* collectCacheStatsFromStream(events: AsyncGenerator<ResponsesStre
     yield event;
   }
   if (lastStats && onCacheStats) onCacheStats(lastStats);
+}
+
+/**
+ * Check if the last user message in the input contains image content.
+ * Assistant messages and tool results are skipped — only the most recent
+ * `role: 'user'` item is inspected.
+ */
+function lastUserMessageHasImage(request: ResponsesRequest): boolean {
+  const input = request.input;
+  if (!input || !Array.isArray(input)) return false;
+  for (let i = input.length - 1; i >= 0; i--) {
+    const item = input[i];
+    if (!item || typeof item !== 'object') continue;
+    if ((item as Record<string, unknown>).role !== 'user') continue;
+    // Found the last user message
+    const content = (item as Record<string, unknown>).content;
+    if (!Array.isArray(content)) return false;
+    for (const part of content) {
+      if (part && typeof part === 'object') {
+        const p = part as Record<string, unknown>;
+        const t = p.type;
+        if (t === 'input_image' || t === 'image' || t === 'image_url') return true;
+      }
+    }
+    return false;
+  }
+  return false;
 }
 
 // ── error helpers ──

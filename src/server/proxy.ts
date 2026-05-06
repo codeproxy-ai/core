@@ -134,6 +134,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     model: options.model,
     defaultHeaders: options.defaultHeaders,
     dropImages: options.dropImages,
+    fallbackUpstream: options.fallbackUpstream,
     fetch: capturingFetch,
     passthroughFetch: async () =>
       new Response(JSON.stringify({ error: { message: 'Not found' } }), {

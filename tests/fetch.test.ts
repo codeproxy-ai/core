@@ -657,3 +657,186 @@ describe('config headers', () => {
     expect(defaultHeaders['authorization']).toBe('Bearer sk-test-key');
   });
 });
+
+describe('fallback upstream', () => {
+  it('routes to fallback when last user message has an image', async () => {
+    let capturedUrl = '';
+    const upstream: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedUrl = typeof input === 'string' ? input : input.toString();
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-fb', object: 'chat.completion', created: 1, model: 'gpt-4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://primary.com/v1',
+      fetch: upstream,
+      dropImages: true,
+      fallbackUpstream: { baseUrl: 'https://fallback.com/v1' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'desc' }, { type: 'input_image', image_url: 'https://example.com/img.png' }] }],
+      }),
+    });
+
+    expect(capturedUrl).toBe('https://fallback.com/v1/chat/completions');
+  });
+
+  it('stays on primary when last user message has no image (even if older ones did)', async () => {
+    let capturedUrl = '';
+    const upstream: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedUrl = typeof input === 'string' ? input : input.toString();
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-pr', object: 'chat.completion', created: 1, model: 'gpt-4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://primary.com/v1',
+      fetch: upstream,
+      dropImages: true,
+      fallbackUpstream: { baseUrl: 'https://fallback.com/v1' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        input: [
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'old image' }, { type: 'input_image', image_url: 'https://example.com/old.png' }] },
+          { type: 'message', role: 'assistant', content: 'reply' },
+          { type: 'message', role: 'user', content: 'text-only follow-up' },
+        ],
+      }),
+    });
+
+    expect(capturedUrl).toBe('https://primary.com/v1/chat/completions');
+  });
+
+  it('stays on primary when all user messages are text-only', async () => {
+    let capturedUrl = '';
+    const upstream: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedUrl = typeof input === 'string' ? input : input.toString();
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-pr', object: 'chat.completion', created: 1, model: 'gpt-4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://primary.com/v1',
+      fetch: upstream,
+      dropImages: true,
+      fallbackUpstream: { baseUrl: 'https://fallback.com/v1' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        input: [{ type: 'message', role: 'user', content: 'plain text' }],
+      }),
+    });
+
+    expect(capturedUrl).toBe('https://primary.com/v1/chat/completions');
+  });
+
+  it('preserves images in translated body when using fallback', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-fb', object: 'chat.completion', created: 1, model: 'gpt-4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://primary.com/v1',
+      fetch: upstream,
+      dropImages: true,
+      fallbackUpstream: { baseUrl: 'https://fallback.com/v1' },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'gpt-4',
+        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'desc' }, { type: 'input_image', image_url: 'https://example.com/img.png' }] }],
+      }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    const userMsg = upstreamBody.messages.find((m: { role: string }) => m.role === 'user');
+    const imageParts = userMsg.content.filter((p: { type: string }) => p.type === 'image_url');
+    expect(imageParts).toHaveLength(1);
+  });
+
+  it('uses fallback upstream format when configured', async () => {
+    let capturedUrl = '';
+    const upstream: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedUrl = typeof input === 'string' ? input : input.toString();
+      return new Response(
+        JSON.stringify({
+          id: 'msg_fb', type: 'message', role: 'assistant', model: 'claude-sonnet-4-7',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://primary.com/v1',
+      fetch: upstream,
+      dropImages: true,
+      fallbackUpstream: {
+        baseUrl: 'https://api.anthropic.com/v1/messages',
+        upstreamFormat: 'anthropic',
+      },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-7',
+        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'desc' }, { type: 'input_image', image_url: 'https://example.com/img.png' }] }],
+      }),
+    });
+
+    expect(capturedUrl).toBe('https://api.anthropic.com/v1/messages');
+    expect(capturedUrl).not.toContain('/chat/completions');
+  });
+});
