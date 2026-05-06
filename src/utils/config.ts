@@ -160,8 +160,8 @@ export function validateUpstreamConfig(upstream: unknown): {
     return { valid: false, error: 'headers must be an object if provided' };
   }
 
-  if (cfg.reasoning_effort !== undefined && typeof cfg.reasoning_effort !== 'string') {
-    return { valid: false, error: 'reasoning_effort must be a string if provided' };
+  if (cfg.reasoningEffort !== undefined && typeof cfg.reasoningEffort !== 'string') {
+    return { valid: false, error: 'reasoningEffort must be a string if provided' };
   }
 
   // thinking is optional and can be any type; no validation needed

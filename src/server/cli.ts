@@ -176,7 +176,7 @@ async function loadConfigAndApplyOverrides(
   console.log(`Loaded config from: ${configPath}`);
   console.log(`Current upstream: ${config.currentUpstream}${upstreamConfig.format ? ` (${upstreamConfig.format})` : ''}`);
   console.log(`Model: ${upstreamConfig.model || "(not set)"}`);
-  const mergedEffort = upstreamConfig.reasoning_effort ?? (config as any).reasoning_effort;
+  const mergedEffort = upstreamConfig.reasoningEffort ?? (config as any).reasoningEffort;
   if (mergedEffort) console.log(`Reasoning effort: ${mergedEffort}`);
   const mergedHeaders: Record<string, string> = { ...(config as any).headers ?? {} };
   if (upstreamConfig.headers) Object.assign(mergedHeaders, upstreamConfig.headers);
@@ -192,7 +192,7 @@ async function loadConfigAndApplyOverrides(
     port: overrides.port !== undefined ? overrides.port : ((config as any).port ? Number((config as any).port) : upstreamConfig.port ? Number(upstreamConfig.port) : undefined),
     dropImages: upstreamConfig.dropImages,
     cors: overrides.cors,
-    reasoning_effort: upstreamConfig.reasoning_effort ?? (config as any).reasoning_effort,
+    reasoning_effort: upstreamConfig.reasoningEffort ?? (config as any).reasoningEffort,
     thinking: upstreamConfig.thinking ?? (config as any).thinking,
   };
 
@@ -224,7 +224,7 @@ async function loadConfigAndApplyOverrides(
         model: fbConfig.model ?? options.model,
         defaultHeaders: Object.keys(fbHeaders).length > 0 ? fbHeaders : undefined,
         apiVersion: fbConfig.apiVersion ?? options.apiVersion,
-        reasoning_effort: fbConfig.reasoning_effort ?? options.reasoning_effort,
+        reasoning_effort: fbConfig.reasoningEffort ?? options.reasoning_effort,
         thinking: fbConfig.thinking ?? options.thinking,
       };
       console.log(`Fallback upstream: ${upstreamConfig.fallback}${fbConfig.model ? ` (${fbConfig.model})` : ''}`);

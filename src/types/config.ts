@@ -26,7 +26,7 @@ export interface UpstreamConfig {
   /** Name of another upstream to use as fallback when the last user message contains images. */
   fallback?: string;
   /** Reasoning effort for openai-chat upstreams (low/medium/high). */
-  reasoning_effort?: string;
+  reasoningEffort?: string;
   /** Thinking configuration for anthropic or openai-chat upstreams. */
   thinking?: unknown;
 }
@@ -41,7 +41,7 @@ export interface ConfigFile {
   /** List of available upstream configs. */
   upstreams: Record<string, UpstreamConfig>;
   /** Default reasoning effort for openai-chat upstreams (low/medium/high). */
-  reasoning_effort?: string;
+  reasoningEffort?: string;
   /** Default thinking configuration for anthropic or openai-chat upstreams. */
   thinking?: unknown;
 }

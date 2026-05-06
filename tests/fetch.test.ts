@@ -656,6 +656,51 @@ describe('config headers', () => {
     expect(defaultHeaders['x-root-header']).toBe('root-val');
     expect(defaultHeaders['authorization']).toBe('Bearer sk-test-key');
   });
+
+  it('loads reasoningEffort from upstream config', async () => {
+    // Simulate the config loading logic from cli.ts
+    const config = {
+      version: '1.0',
+      currentUpstream: 'test',
+      upstreams: {
+        test: { baseUrl: 'https://api.openai.com/v1', reasoningEffort: 'high' },
+      },
+    };
+
+    const upstreamConfig = config.upstreams[config.currentUpstream];
+    const reasoning_effort = upstreamConfig.reasoningEffort ?? (config as any).reasoningEffort;
+    expect(reasoning_effort).toBe('high');
+  });
+
+  it('loads reasoningEffort from root config as fallback', async () => {
+    const config = {
+      version: '1.0',
+      currentUpstream: 'test',
+      reasoningEffort: 'low',
+      upstreams: {
+        test: { baseUrl: 'https://api.openai.com/v1' },
+      },
+    };
+
+    const upstreamConfig = config.upstreams[config.currentUpstream];
+    const reasoning_effort = upstreamConfig.reasoningEffort ?? (config as any).reasoningEffort;
+    expect(reasoning_effort).toBe('low');
+  });
+
+  it('upstream reasoningEffort overrides root reasoningEffort', async () => {
+    const config = {
+      version: '1.0',
+      currentUpstream: 'test',
+      reasoningEffort: 'low',
+      upstreams: {
+        test: { baseUrl: 'https://api.openai.com/v1', reasoningEffort: 'medium' },
+      },
+    };
+
+    const upstreamConfig = config.upstreams[config.currentUpstream];
+    const reasoning_effort = upstreamConfig.reasoningEffort ?? (config as any).reasoningEffort;
+    expect(reasoning_effort).toBe('medium');
+  });
 });
 
 describe('fallback upstream', () => {
