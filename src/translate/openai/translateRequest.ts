@@ -72,9 +72,6 @@ export function translateRequest(
     options.defaultMaxTokens;
   if (typeof maxTokens === 'number') request.max_tokens = maxTokens;
 
-  const responseFormat = mapResponseFormat(data.text);
-  if (responseFormat) request.response_format = responseFormat;
-
   const tools = mapTools(data.tools ?? [], options.stripStrict);
   if (tools.length) {
     request.tools = tools;

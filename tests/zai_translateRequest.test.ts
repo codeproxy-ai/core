@@ -275,37 +275,14 @@ describe('translateRequest (Responses -> Zai)', () => {
     expect(nextMsg.content).toBe('file.txt');
   });
 
-  it('maps Responses text.format json_schema to chat response_format', () => {
-    const schema = {
-      type: 'object',
-      properties: { message: { type: 'string', minLength: 8, maxLength: 72 } },
-      required: ['message'],
-      additionalProperties: false,
-    };
+  it('does not inject response_format (incompatible with most upstreams)', () => {
     const { request } = translateRequest({
       model: 'gpt-5',
       input: 'go',
       text: {
-        format: { type: 'json_schema', name: 'codex_output_schema', strict: true, schema },
+        format: { type: 'json_schema', name: 'test', strict: true, schema: { type: 'object' } },
       },
     } as never);
-    expect(request.response_format).toEqual({
-      type: 'json_schema',
-      json_schema: { name: 'codex_output_schema', schema, strict: true },
-    });
-  });
-
-  it('maps Responses text.format json_object to chat response_format', () => {
-    const { request } = translateRequest({
-      model: 'gpt-5',
-      input: 'go',
-      text: { format: { type: 'json_object' } },
-    } as never);
-    expect(request.response_format).toEqual({ type: 'json_object' });
-  });
-
-  it('omits response_format when text.format is absent', () => {
-    const { request } = translateRequest({ model: 'gpt-5', input: 'go' });
     expect(request.response_format).toBeUndefined();
   });
 });
