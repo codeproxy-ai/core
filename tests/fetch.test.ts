@@ -885,3 +885,82 @@ describe('fallback upstream', () => {
     expect(capturedUrl).not.toContain('/chat/completions');
   });
 });
+
+  it('uses fallback model when configured', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-fb2', object: 'chat.completion', created: 1, model: 'gpt-5.4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://primary.com/v1',
+      model: 'primary-model',
+      fetch: upstream,
+      dropImages: true,
+      fallbackUpstream: {
+        baseUrl: 'https://fallback.com/v1',
+        model: 'gpt-5.4',
+      },
+    });
+
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'deepseek-v4-flash',
+        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'desc' }, { type: 'input_image', image_url: 'https://example.com/img.png' }] }],
+      }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    expect(upstreamBody.model).toBe('gpt-5.4');
+  });
+
+  it('uses fallback model when configured without dropImages (direct model override)', async () => {
+    let capturedBody = '';
+    const upstream: typeof fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-fb3', object: 'chat.completion', created: 1, model: 'gpt-5.4',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' } }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const fetchImpl = createResponsesFetch({
+      upstreamFormat: 'openai-chat',
+      baseUrl: 'https://primary.com/v1',
+      model: 'deepseek-v4-flash',
+      fetch: upstream,
+      fallbackUpstream: {
+        baseUrl: 'https://fallback.com/v1',
+        model: 'gpt-5.4',
+      },
+    });
+
+    // No images in request — fallback should not trigger, model stays as primary
+    await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+      body: JSON.stringify({
+        model: 'something',
+        input: 'hello',
+      }),
+    });
+
+    const upstreamBody = JSON.parse(capturedBody);
+    // Primary model is used, not fallback
+    expect(upstreamBody.model).toBe('deepseek-v4-flash');
+  });
