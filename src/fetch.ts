@@ -189,6 +189,7 @@ async function handleResponses(
     const fb = options.fallbackUpstream;
     options = { ...options, ...fb, fallbackUpstream: undefined };
     format = fb.upstreamFormat ?? format;
+    if (options.model) request.model = options.model;
     const fbModel = fb.model ? `, model: ${fb.model}` : '';
     console.warn(`[fallback] last user message has image, routing to ${fb.baseUrl}${fbModel}`);
   }
