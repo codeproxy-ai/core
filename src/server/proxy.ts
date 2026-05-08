@@ -179,6 +179,16 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     requestInfo.url = req.url ?? '/v1/responses';
     requestInfo.startTime = start;
 
+    const timeoutMs = options.timeoutMs;
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    if (timeoutMs && timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        logger?.warn(`[timeout] request exceeded ${timeoutMs}ms, aborting`);
+        res.destroy();
+        req.destroy();
+      }, timeoutMs);
+    }
+
     try {
       await handleRequest(req, res, {
         apiFetch,
@@ -200,6 +210,8 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       } catch {
         // ignore
       }
+    } finally {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
     }
   });
 
