@@ -67,9 +67,9 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     if (activeRequests.size === 0) return;
     const parts = Array.from(activeRequests.entries()).map(([, req]) => {
       const elapsed = Date.now() - req.startTime;
-      return `${req.method} ${req.url} [${fmtDuration(elapsed)}]`;
+      return `[${fmtDuration(elapsed)}]`;
     });
-    process.stdout.write(`\r\x1b[K--> ${parts.join(', ')}`);
+    process.stdout.write(`\r\x1b[K⏳ ${parts.join(', ')}`);
   }
 
   const requestTracker = {
