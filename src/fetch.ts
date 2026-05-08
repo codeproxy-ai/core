@@ -270,10 +270,7 @@ function buildUpstreamBody(
   const { request: cr } = openai.translateRequest(request, { dropImages: dropImages });
   cr.stream = streaming;
   if (streaming) (cr as Record<string, unknown>).stream_options = { include_usage: true };
-  if (reasoning_effort !== undefined) {
-    // xhigh → max for upstreams like DeepSeek that don't accept xhigh
-    (cr as Record<string, unknown>).reasoning_effort = reasoning_effort === 'xhigh' ? 'max' : reasoning_effort;
-  }
+  if (reasoning_effort !== undefined) (cr as Record<string, unknown>).reasoning_effort = reasoning_effort;
   if (thinking !== undefined) (cr as Record<string, unknown>).thinking = thinking;
   return { upstreamBody: cr, requestMetadata: buildRequestMetadata(request, cr.temperature, cr.top_p) };
 }

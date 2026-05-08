@@ -303,12 +303,3 @@ describe('translateRequest (Responses -> Zai)', () => {
     });
     expect((request as any).reasoning_effort).toBeUndefined();
   });
-
-  it('maps xhigh effort to max for upstream compatibility', () => {
-    const { request } = translateRequest({
-      model: 'deepseek-v4-pro',
-      input: 'hello',
-      reasoning: { effort: 'xhigh' },
-    } as never);
-    expect((request as any).reasoning_effort).toBe('max');
-  });
