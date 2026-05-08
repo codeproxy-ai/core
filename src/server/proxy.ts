@@ -156,7 +156,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
       const ratio = avg > 0 ? durationMs / avg : 1;
       const color = ratio < 0.8 ? '\x1b[32m' : ratio < 1.5 ? '\x1b[33m' : '\x1b[31m';
       const reset = '\x1b[0m';
-      const logMsg = `[${fmtTime(new Date())}] ${requestInfo.method || 'POST'} ${requestInfo.url || '/v1/responses'} -> 200 (${color}${fmtDuration(durationMs)}${reset} avg=${fmtDuration(Math.round(avg))}) [${parts.join(', ')}]`;
+      const logMsg = `[${fmtTime(new Date())}] -> 200 (${color}${fmtDuration(durationMs)}${reset} avg=${fmtDuration(Math.round(avg))}) [${parts.join(', ')}]`;
       requestInfo.resultLog = stats.cachedTokens < 1024 && billedTokens > 0
         ? `⚠️ NO CACHE -- ${logMsg}`
         : logMsg;
@@ -286,11 +286,11 @@ async function handleRequest(
     opts.requestTracker.remove(requestId);
     if (opts.logger) {
       if (response.status >= 400) {
-        process.stdout.write(`\r\x1b[K<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
+        process.stdout.write(`\r\x1b[K<-- ${response.status}  (${fmtDuration(Date.now() - requestStart)})\n`);
       } else if (opts.requestInfo.resultLog) {
         process.stdout.write(`\r\x1b[K${opts.requestInfo.resultLog}\n`);
       } else {
-        process.stdout.write(`\r\x1b[K<-- ${response.status} ${method} ${urlPath}  (${fmtDuration(Date.now() - requestStart)})\n`);
+        process.stdout.write(`\r\x1b[K<-- ${response.status}  (${fmtDuration(Date.now() - requestStart)})\n`);
       }
     }
     if (response.status >= 400) {
