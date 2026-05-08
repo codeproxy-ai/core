@@ -175,7 +175,7 @@ export type ResponsesToolChoice =
   | undefined;
 
 export interface ResponsesReasoningConfig {
-  effort?: 'minimal' | 'low' | 'medium' | 'high' | string;
+  effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | string;
   summary?: string;
   [key: string]: unknown;
 }

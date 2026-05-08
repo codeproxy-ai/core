@@ -261,6 +261,8 @@ function buildUpstreamBody(
         (ar as Record<string, unknown>).thinking = { type: 'enabled', budget_tokens: 16384 };
       } else if (effort === 'high') {
         (ar as Record<string, unknown>).thinking = { type: 'enabled', budget_tokens: 32768 };
+      } else if (effort === 'xhigh') {
+        (ar as Record<string, unknown>).thinking = { type: 'enabled', budget_tokens: 65536 };
       }
     }
     return { upstreamBody: ar, requestMetadata: buildRequestMetadata(request, ar.temperature, ar.top_p) };

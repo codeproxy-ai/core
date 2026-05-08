@@ -32,7 +32,7 @@ export interface TranslateRequestOptions {
   /** Default max tokens when not provided (Anthropic requires `max_tokens`). */
   defaultMaxTokens?: number;
   /** Thinking budget overrides, keyed by effort. */
-  reasoningBudgets?: Partial<Record<'minimal' | 'low' | 'medium' | 'high', number>>;
+  reasoningBudgets?: Partial<Record<'minimal' | 'low' | 'medium' | 'high' | 'xhigh', number>>;
 }
 
 export interface TranslateRequestResult {
@@ -45,6 +45,7 @@ const DEFAULT_REASONING_BUDGETS: Record<string, number> = {
   low: 4096,
   medium: 16384,
   high: 32768,
+  xhigh: 65536,
 };
 
 /** Convert a Responses API request into an Anthropic Messages API request. */
@@ -400,7 +401,7 @@ function mapToolChoice(choice: ResponsesToolChoice): AnthropicToolChoice | undef
 function mapThinking(
   data: ResponsesRequest,
   maxTokens: number,
-  overrides?: Partial<Record<'minimal' | 'low' | 'medium' | 'high', number>>,
+  overrides?: Partial<Record<'minimal' | 'low' | 'medium' | 'high' | 'xhigh', number>>,
 ): AnthropicThinkingConfig | undefined {
   const reasoning = data.reasoning;
   if (!reasoning) return undefined;
