@@ -43,6 +43,8 @@ export interface CreateResponsesFetchOptions {
   reasoning_effort?: string;
   /** Override thinking configuration sent to the upstream model. */
   thinking?: unknown;
+  /** Timeout in milliseconds for upstream requests. Defaults to no timeout. */
+  timeoutMs?: number;
   /** Fallback upstream for requests where the last user message contains images. */
   fallbackUpstream?: {
     baseUrl: string;
@@ -199,12 +201,28 @@ async function handleResponses(
   const { upstreamBody, requestMetadata } = buildUpstreamBody(request, format, streaming, options.baseUrl, dropImages, options.reasoning_effort, options.thinking);
   const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
 
-  const upstream = await baseFetch(resolvedUrl, {
-    method: 'POST',
-    headers: upstreamHeaders,
-    body: JSON.stringify(upstreamBody),
-    signal,
-  });
+  // Apply timeout if configured
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let upstreamSignal = signal;
+  if (options.timeoutMs && options.timeoutMs > 0) {
+    const timeoutController = new AbortController();
+    timeoutId = setTimeout(() => timeoutController.abort(new Error('Timeout')), options.timeoutMs);
+    if (signal) {
+      signal.addEventListener('abort', () => timeoutController.abort(signal.reason), { once: true });
+    }
+    upstreamSignal = timeoutController.signal;
+  }
+  let upstream: Response;
+  try {
+    upstream = await baseFetch(resolvedUrl, {
+      method: 'POST',
+      headers: upstreamHeaders,
+      body: JSON.stringify(upstreamBody),
+      signal: upstreamSignal,
+    });
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 
   if (!upstream.ok) {
     return new Response(await upstream.text().catch(() => ''), { status: upstream.status, headers: { 'content-type': 'application/json' } });

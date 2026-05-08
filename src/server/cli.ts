@@ -190,6 +190,7 @@ async function loadConfigAndApplyOverrides(
     model: overrides.model || upstreamConfig.model,
     host: overrides.host || upstreamConfig.host,
     port: overrides.port !== undefined ? overrides.port : ((config as any).port ? Number((config as any).port) : upstreamConfig.port ? Number(upstreamConfig.port) : undefined),
+    timeoutMs: upstreamConfig.timeoutMs ?? (config as any).timeoutMs,
     dropImages: upstreamConfig.dropImages,
     cors: overrides.cors,
     reasoning_effort: upstreamConfig.reasoningEffort ?? (config as any).reasoningEffort,

@@ -21,6 +21,8 @@ export interface UpstreamConfig {
   model?: string;
   /** Additional default headers. */
   headers?: Record<string, string>;
+  /** Timeout in milliseconds for upstream requests. (e.g. 300000 for 5min). */
+  timeoutMs?: number;
   /** If true, drop image/file parts from user messages (for text-only models). */
   dropImages?: boolean;
   /** Name of another upstream to use as fallback when the last user message contains images. */
@@ -44,6 +46,8 @@ export interface ConfigFile {
   reasoningEffort?: string;
   /** Default thinking configuration for anthropic or openai-chat upstreams. */
   thinking?: unknown;
+  /** Timeout in milliseconds for upstream requests (top-level default). */
+  timeoutMs?: number;
 }
 
 /** Default config file names to search for. */

@@ -133,6 +133,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     apiVersion: options.apiVersion,
     model: options.model,
     defaultHeaders: options.defaultHeaders,
+    timeoutMs: options.timeoutMs,
     dropImages: options.dropImages,
     fallbackUpstream: options.fallbackUpstream,
     fetch: capturingFetch,
