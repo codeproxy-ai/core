@@ -286,3 +286,20 @@ describe('translateRequest (Responses -> Zai)', () => {
     expect(request.response_format).toBeUndefined();
   });
 });
+
+  it('maps reasoning.effort to reasoning_effort in request body', () => {
+    const { request } = translateRequest({
+      model: 'deepseek-v4-pro',
+      input: 'hello',
+      reasoning: { effort: 'high' },
+    } as never);
+    expect((request as any).reasoning_effort).toBe('high');
+  });
+
+  it('omits reasoning_effort when reasoning.effort is not provided', () => {
+    const { request } = translateRequest({
+      model: 'deepseek-v4-pro',
+      input: 'hello',
+    });
+    expect((request as any).reasoning_effort).toBeUndefined();
+  });
