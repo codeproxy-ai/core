@@ -66,7 +66,10 @@ export function translateRequest(
   if (typeof data.temperature === 'number') request.temperature = data.temperature;
   if (typeof data.top_p === 'number') request.top_p = data.top_p;
   const effort = typeof data.reasoning?.effort === 'string' ? data.reasoning.effort : undefined;
-  if (effort) (request as Record<string, unknown>).reasoning_effort = effort;
+  if (effort) {
+    // xhigh is a Responses API concept; map to 'max' for upstreams like DeepSeek
+    (request as Record<string, unknown>).reasoning_effort = effort === 'xhigh' ? 'max' : effort;
+  }
 
   const maxTokens =
     (typeof data.max_output_tokens === 'number' && data.max_output_tokens) ||
