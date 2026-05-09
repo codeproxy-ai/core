@@ -26,6 +26,8 @@
   ],
   "exclude": [
     "dist",
-    "node_modules"
+    "node_modules",
+    "tests/translateStream.test.ts",
+    "tests/zai_translateStream.test.ts"
   ]
 }
