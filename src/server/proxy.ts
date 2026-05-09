@@ -180,10 +180,12 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
     requestInfo.startTime = start;
 
     const timeoutMs = options.timeoutMs;
+    const abortController = new AbortController();
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     if (timeoutMs && timeoutMs > 0) {
       timeoutTimer = setTimeout(() => {
         logger?.warn(`[timeout] request exceeded ${timeoutMs}ms, aborting`);
+        abortController.abort();
         res.destroy();
         req.destroy();
       }, timeoutMs);
@@ -191,6 +193,7 @@ export async function startProxy(options: StartProxyOptions): Promise<RunningPro
 
     try {
       await handleRequest(req, res, {
+        signal: abortController.signal,
         apiFetch,
         cors,
         logger,
@@ -247,6 +250,7 @@ async function handleRequest(
     apiFetch: typeof fetch;
     cors: boolean;
     logger: Pick<Console, 'log' | 'warn' | 'error'> | null;
+    signal: AbortSignal;
     method: string;
     url: string;
     upstreamCapture: {
@@ -289,6 +293,7 @@ async function handleRequest(
     const response = await opts.apiFetch(`http://local${urlPath}`, {
       method,
       headers,
+      signal: opts.signal,
       body: body ? new Uint8Array(body) : undefined,
     });
 

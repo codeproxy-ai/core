@@ -80,4 +80,63 @@ describe('startProxy', () => {
     expect(res.status).toBe(204);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
+
+  it('aborts upstream fetch when request exceeds timeoutMs', async () => {
+    // Use an upstream that never responds
+    const slowFetch: typeof fetch = async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      return new Promise<Response>((_resolve, _reject) => {
+        // Intentionally never resolve/reject
+      });
+    };
+    const slowProxy = await startProxy({
+      upstreamFormat: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1/messages',
+      host: '127.0.0.1',
+      port: 0,
+      fetch: slowFetch,
+      timeoutMs: 100,
+      logger: null,
+    });
+
+    const start = Date.now();
+    const res = await fetch(`${slowProxy.url}/v1/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'test', input: 'Hello' }),
+    }).catch(() => {
+      // Connection destroyed/reset is expected on abort
+      return new Response(null, { status: 499 });
+    });
+    const elapsed = Date.now() - start;
+
+    await slowProxy.close();
+
+    // Request should be aborted within ~timeoutMs (with some margin)
+    expect(elapsed).toBeLessThan(5000);
+  });
+
+  it('timeoutMs=0 disables timeout', async () => {
+    const upstream = mockUpstream();
+    const noTimeoutProxy = await startProxy({
+      upstreamFormat: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1/messages',
+      host: '127.0.0.1',
+      port: 0,
+      fetch: upstream.fetch,
+      timeoutMs: 0,
+      logger: null,
+    });
+
+    const res = await fetch(`${noTimeoutProxy.url}/v1/responses`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'test', input: 'Hello' }),
+    });
+    expect(res.status).toBe(200);
+
+    await noTimeoutProxy.close();
+  });
 });

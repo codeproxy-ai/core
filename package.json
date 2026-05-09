@@ -1,5 +1,5 @@
 {
-  "name": "responses-proxy",
+  "name": "responses-api-translator",
   "version": "0.2.0",
   "description": "Translate between OpenAI Responses API and third-party AI upstreams (Anthropic, OpenAI Chat, etc.) in pure TypeScript. Browser-compatible.",
   "keywords": [
