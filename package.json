@@ -1,31 +1,23 @@
 {
-  "name": "responses-api-translator",
-  "version": "0.2.0",
-  "description": "Translate between OpenAI Responses API and third-party AI upstreams (Anthropic, OpenAI Chat, etc.) in pure TypeScript. Browser-compatible.",
+  "name": "@codeproxy/core",
+  "version": "0.1.0",
+  "description": "Convert upstream LLM APIs (Chat Completions / Anthropic Messages) to OpenAI Responses API format. Zero dependencies, works in browser/Node/edge.",
   "keywords": [
     "openai",
     "responses-api",
     "anthropic",
     "claude",
-    "proxy",
-    "sse",
-    "browser"
+    "deepseek",
+    "translate",
+    "typescript"
   ],
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./server": {
-      "types": "./dist/server/index.d.ts",
-      "import": "./dist/server/index.js",
-      "require": "./dist/server/index.cjs"
     }
   },
   "files": [
@@ -34,10 +26,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "dev": "tsx src/server/cli.ts --upstream-format anthropic --base-url https://api.anthropic.com/v1/messages --port 8787",
-    "dev:openai": "tsx src/server/cli.ts --upstream-format openai-chat --base-url https://api.openai.com/v1/chat/completions --port 8787",
-    "dev:config": "tsx src/server/cli.ts --config config.json",
-    "build": "tsup && npx esbuild src/server/cli.ts --bundle --platform=node --outfile=dist/server/cli.js --format=esm --banner:js=\"#!/usr/bin/env node\"",
+    "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -64,8 +53,5 @@
   "sideEffects": false,
   "engines": {
     "node": ">=18"
-  },
-  "bin": {
-    "responses-proxy": "dist/server/cli.js"
   }
 }

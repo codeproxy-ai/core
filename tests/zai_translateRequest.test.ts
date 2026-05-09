@@ -361,21 +361,11 @@ describe('translateRequest (Responses -> Zai)', () => {
   });
 });
 
-<<<<<<< HEAD
-  it('ignores reasoning.effort from client request body', () => {
-    const { request } = translateRequest({
-      model: 'deepseek-v4-pro',
-      input: 'hello',
-      reasoning: { effort: 'high' },
-    } as never);
-    expect((request as any).reasoning_effort).toBeUndefined();
-=======
 it('maps reasoning.effort to reasoning_effort in request body', () => {
   const { request } = translateRequest({
     model: 'deepseek-v4-pro',
     input: 'hello',
     reasoning: { effort: 'high' },
->>>>>>> fix: apply ESLint rules - add consistent-type-assertions (no as), fix no-one-letter-vars rule bug
   });
   const reqRecord: Record<string, unknown> = request;
   expect(reqRecord.reasoning_effort).toBe('high');
