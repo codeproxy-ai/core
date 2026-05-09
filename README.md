@@ -38,6 +38,8 @@ Upstream API (Chat Completions / Anthropic Messages)
 OpenAI Responses API ←── consumed by Codex / Claude Code
 ```
 
+> **CLI** → [`@codeproxy/cli`](https://github.com/codeproxy-ai/cli) — local proxy server for running any LLM with Codex / Claude Code
+
 ## Install
 
 ```bash

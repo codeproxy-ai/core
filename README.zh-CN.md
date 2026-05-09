@@ -38,6 +38,8 @@ const response = await client.responses.create({
 OpenAI Responses API ←── 供 Codex / Claude Code 消费
 ```
 
+> **CLI** → [`@codeproxy/cli`](https://github.com/codeproxy-ai/cli) — 本地代理服务器，让 Codex / Claude Code 使用任意模型
+
 ## 安装
 
 ```bash
