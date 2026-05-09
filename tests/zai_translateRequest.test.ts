@@ -287,13 +287,13 @@ describe('translateRequest (Responses -> Zai)', () => {
   });
 });
 
-  it('maps reasoning.effort to reasoning_effort in request body', () => {
+  it('ignores reasoning.effort from client request body', () => {
     const { request } = translateRequest({
       model: 'deepseek-v4-pro',
       input: 'hello',
       reasoning: { effort: 'high' },
     } as never);
-    expect((request as any).reasoning_effort).toBe('high');
+    expect((request as any).reasoning_effort).toBeUndefined();
   });
 
   it('omits reasoning_effort when reasoning.effort is not provided', () => {
