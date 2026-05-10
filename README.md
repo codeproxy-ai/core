@@ -82,6 +82,21 @@ All Responses API, Anthropic, and OpenAI Chat types are exported from the packag
 - `encodeSseEvent(event, data)` — Serialize SSE event to wire format
 - `makeId(prefix)` — Generate monotonic-ish IDs
 
+## Testing & Coverage
+
+| Metric | Score |
+|---|---|
+| Statements | 95.35% |
+| Branches | 87.43% |
+| Functions | 97.46% |
+| Lines | 95.35% |
+| Tests | 361 (41 files) |
+
+```bash
+pnpm test        # Run tests
+pnpm test:coverage  # Run tests with coverage report
+```
+
 ## License
 
 MIT
