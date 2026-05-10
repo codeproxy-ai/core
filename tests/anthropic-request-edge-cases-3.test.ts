@@ -55,7 +55,8 @@ describe('anthropic translateRequest - more branch coverage', () => {
     });
     expect(request.system).toBeDefined();
     if (request.system) {
-      expect(request.system[0].text).toBe('Be');
+      const firstBlock = request.system[0];
+      expect(typeof firstBlock === 'string' ? firstBlock : firstBlock.text).toBe('Be');
     }
   });
 

@@ -143,7 +143,7 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles cache_control on system items', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      instructions: [{ text: 'instruct', cache_control: { type: 'ephemeral' } }],
+      instructions: [{ text: 'instruct', cache_control: { type: 'ephemeral' } } as never],
       input: 'hi',
     });
     expect(request.system).toBeDefined();

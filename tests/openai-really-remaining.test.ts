@@ -175,7 +175,7 @@ describe('openai translateRequest final remaining', () => {
       input: [
         {
           type: 'reasoning',
-          content: [{ type: 'reasoning_text', text: ['step1', 'step2'] }],
+          content: [{ type: 'reasoning_text', text: ['step1', 'step2'] } as never],
           thought_signature: 'sig_1',
         },
         {

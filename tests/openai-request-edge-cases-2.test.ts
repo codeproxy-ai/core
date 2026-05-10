@@ -230,7 +230,7 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
       input: 'hi',
-      tools: [{ type: 'function', function: {} }],
+      tools: [{ type: 'function', function: {} as never }],
     });
     expect(request.tools).toBeUndefined();
   });

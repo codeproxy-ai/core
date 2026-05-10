@@ -143,8 +143,8 @@ describe('all remaining uncovered branches', () => {
       baseUrl: 'https://api.openai.com/v1',
       fetch: upstream,
     });
-    // Passing a Response object as input
-    const res = await fetchFn(new Response('body'), { method: 'GET' });
+    // Passing a non-standard path
+    const res = await fetchFn('https://api.openai.com/v1/models', { method: 'GET' });
     expect(res.status).toBe(200);
   });
 

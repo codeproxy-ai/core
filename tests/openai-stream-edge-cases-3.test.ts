@@ -37,7 +37,7 @@ describe('openai translateStream - remaining branch coverage', () => {
     const doneEvents = events.filter(e => e.type === 'response.output_item.done');
     expect(doneEvents.length).toBe(1);
     // eslint-disable-next-line no-restricted-syntax -- test needs wider type
-    const doneEvent = doneEvents[0] as { item: { type: string; action: { command: string[] } } };
+    const doneEvent = doneEvents[0] as unknown as { item: { type: string; action: { command: string[] } } };
     expect(doneEvent.item.type).toBe('local_shell_call');
   });
 

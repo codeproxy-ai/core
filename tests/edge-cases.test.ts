@@ -59,7 +59,7 @@ describe('anthropic translateRequest edge cases', () => {
   it('handles cache_control on system blocks', () => {
     const { request, hasPromptCache } = translateRequest({
       model: 'claude-sonnet-4-5',
-      instructions: [{ text: 'be helpful', cache_control: { type: 'ephemeral' } }],
+      instructions: [{ text: 'be helpful', cache_control: { type: 'ephemeral' } } as never],
       input: 'hi',
     });
     expect(hasPromptCache).toBe(true);
