@@ -7,11 +7,13 @@ describe('absolute last branch targets', () => {
   it('openai handles image without url or data', () => {
     const { request } = openaiTranslateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_image' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_image' }],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -20,11 +22,13 @@ describe('absolute last branch targets', () => {
   it('openai handles input_file without mime_type', () => {
     const { request } = openaiTranslateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_file', file_data: 'data:application/pdf;base64,AAA' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_file', file_data: 'data:application/pdf;base64,AAA' }],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -66,12 +70,10 @@ describe('absolute last branch targets', () => {
   it('anthropic handles function_call without matching output', () => {
     const { request } = anthropicTranslateRequest({
       model: 'claude',
-      input: [
-        { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{}' },
-      ],
+      input: [{ type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{}' }],
     });
-    const toolUseMsg = request.messages.find(m =>
-      Array.isArray(m.content) && m.content.some((b: any) => b.type === 'tool_use')
+    const toolUseMsg = request.messages.find(
+      (m) => Array.isArray(m.content) && m.content.some((b: any) => b.type === 'tool_use'),
     );
     expect(toolUseMsg).toBeDefined();
   });
@@ -80,11 +82,13 @@ describe('absolute last branch targets', () => {
   it('openai handles fileChange with changes array', () => {
     const { request } = openaiTranslateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'fileChange',
-        id: 'fc_1',
-        changes: [{ path: '/tmp/test.txt', content: 'test' }],
-      }],
+      input: [
+        {
+          type: 'fileChange',
+          id: 'fc_1',
+          changes: [{ path: '/tmp/test.txt', content: 'test' }],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -93,13 +97,15 @@ describe('absolute last branch targets', () => {
   it('openai handles commandExecution with empty args', () => {
     const { request } = openaiTranslateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'commandExecution',
-        id: 'exec_1',
-        name: 'run',
-        command: 'echo hi',
-        cwd: '/tmp',
-      }],
+      input: [
+        {
+          type: 'commandExecution',
+          id: 'exec_1',
+          name: 'run',
+          command: 'echo hi',
+          cwd: '/tmp',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });

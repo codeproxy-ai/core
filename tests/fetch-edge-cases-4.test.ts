@@ -6,14 +6,19 @@ describe('fetch - remaining branch coverage', () => {
     let capturedUrl = '';
     const upstream: typeof fetch = async (input) => {
       capturedUrl = typeof input === 'string' ? input : input.toString();
-      return new Response(JSON.stringify({
-        id: 'chatcmpl-1',
-        object: 'chat.completion',
-        created: 1,
-        model: 'gpt-4',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'gpt-4',
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -34,11 +39,17 @@ describe('fetch - remaining branch coverage', () => {
     let capturedUrl = '';
     const upstream: typeof fetch = async (input) => {
       capturedUrl = typeof input === 'string' ? input : input.toString();
-      return new Response(JSON.stringify({
-        id: 'msg_1', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'hi' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg_1',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'hi' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -59,11 +70,17 @@ describe('fetch - remaining branch coverage', () => {
     let capturedUrl = '';
     const upstream: typeof fetch = async (input) => {
       capturedUrl = typeof input === 'string' ? input : input.toString();
-      return new Response(JSON.stringify({
-        id: 'msg_1', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'hi' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg_1',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'hi' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({

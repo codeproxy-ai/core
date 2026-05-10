@@ -33,12 +33,14 @@ describe('anthropic translateResponse - edge cases', () => {
       type: 'message',
       role: 'assistant',
       model: 'claude',
-      content: [{
-        type: 'tool_use',
-        id: 'call_1',
-        name: 'shell',
-        input: { command: ['ls', '-la'] },
-      }],
+      content: [
+        {
+          type: 'tool_use',
+          id: 'call_1',
+          name: 'shell',
+          input: { command: ['ls', '-la'] },
+        },
+      ],
       usage: { input_tokens: 1, output_tokens: 1 },
     });
     const item = res.output[0] as { type: string; action?: { type: string; command: string[] } };
@@ -52,12 +54,14 @@ describe('anthropic translateResponse - edge cases', () => {
       type: 'message',
       role: 'assistant',
       model: 'claude',
-      content: [{
-        type: 'tool_use',
-        id: 'call_2',
-        name: 'container.exec',
-        input: { command: ['pwd'] },
-      }],
+      content: [
+        {
+          type: 'tool_use',
+          id: 'call_2',
+          name: 'container.exec',
+          input: { command: ['pwd'] },
+        },
+      ],
       usage: { input_tokens: 1, output_tokens: 1 },
     });
     const item = res.output[0] as { type: string };
@@ -70,12 +74,14 @@ describe('anthropic translateResponse - edge cases', () => {
       type: 'message',
       role: 'assistant',
       model: 'claude',
-      content: [{
-        type: 'tool_use',
-        id: 'call_3',
-        name: 'shell_command',
-        input: { command: ['echo', 'hi'] },
-      }],
+      content: [
+        {
+          type: 'tool_use',
+          id: 'call_3',
+          name: 'shell_command',
+          input: { command: ['echo', 'hi'] },
+        },
+      ],
       usage: { input_tokens: 1, output_tokens: 1 },
     });
     const item = res.output[0] as { type: string };
@@ -88,12 +94,14 @@ describe('anthropic translateResponse - edge cases', () => {
       type: 'message',
       role: 'assistant',
       model: 'claude',
-      content: [{
-        type: 'tool_use',
-        id: 'call_4',
-        name: 'search',
-        input: { q: 'test' },
-      }],
+      content: [
+        {
+          type: 'tool_use',
+          id: 'call_4',
+          name: 'search',
+          input: { q: 'test' },
+        },
+      ],
       usage: { input_tokens: 1, output_tokens: 1 },
     });
     const item = res.output[0] as { type: string };
@@ -109,7 +117,10 @@ describe('anthropic translateResponse - edge cases', () => {
       content: [{ type: 'thinking', thinking: '' }],
       usage: { input_tokens: 1, output_tokens: 0 },
     });
-    const reasoningItem = res.output[0] as { type: string; content: Array<{ type: string; text: string }> };
+    const reasoningItem = res.output[0] as {
+      type: string;
+      content: Array<{ type: string; text: string }>;
+    };
     expect(reasoningItem.type).toBe('reasoning');
     expect(reasoningItem.content[0].text).toBe('');
   });

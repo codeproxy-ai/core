@@ -155,6 +155,4 @@ describe('SSE utils', () => {
       expect(msg.data).toBe('');
     }
   });
-
-
 });

@@ -5,12 +5,10 @@ describe('anthropic translateRequest - sanitizeMessages edge cases', () => {
   it('filters out non user/assistant messages', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [
-        { role: 'user', content: 'hello', type: 'message' },
-      ],
+      input: [{ role: 'user', content: 'hello', type: 'message' }],
     });
-    const roles = request.messages.map(m => m.role);
-    roles.forEach(role => {
+    const roles = request.messages.map((m) => m.role);
+    roles.forEach((role) => {
       expect(['user', 'assistant']).toContain(role);
     });
   });
@@ -55,12 +53,14 @@ describe('anthropic translateRequest - sanitizeMessages edge cases', () => {
   it('handles function_call with commandExecution type and no name', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'commandExecution',
-        call_id: 'call_exec',
-        name: 'run_shell_command',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'commandExecution',
+          call_id: 'call_exec',
+          name: 'run_shell_command',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -68,12 +68,14 @@ describe('anthropic translateRequest - sanitizeMessages edge cases', () => {
   it('handles function_call with local_shell_call type', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'local_shell_call',
-        id: 'call_sh',
-        name: 'local_shell_command',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'local_shell_call',
+          id: 'call_sh',
+          name: 'local_shell_command',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -81,12 +83,14 @@ describe('anthropic translateRequest - sanitizeMessages edge cases', () => {
   it('handles function_call with fileChange type', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'fileChange',
-        id: 'call_fc',
-        name: 'write_file',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'fileChange',
+          id: 'call_fc',
+          name: 'write_file',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -94,12 +98,14 @@ describe('anthropic translateRequest - sanitizeMessages edge cases', () => {
   it('handles function_call without name', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'custom_tool_call',
-        id: 'call_ct',
-        name: 'my_tool',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'custom_tool_call',
+          id: 'call_ct',
+          name: 'my_tool',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -107,12 +113,14 @@ describe('anthropic translateRequest - sanitizeMessages edge cases', () => {
   it('handles function_call with web_search_call type', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'web_search_call',
-        id: 'call_ws',
-        name: 'web_search',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'web_search_call',
+          id: 'call_ws',
+          name: 'web_search',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });

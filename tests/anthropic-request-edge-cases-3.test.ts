@@ -14,7 +14,7 @@ describe('anthropic translateRequest - more branch coverage', () => {
       ],
     });
     // null/undefined blocks should be filtered out, empty text blocks also filtered
-    const userMsg = request.messages.find(m => m.role === 'user');
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
@@ -37,12 +37,14 @@ describe('anthropic translateRequest - more branch coverage', () => {
   it('handles custom_tool_call output type with a fileChange tool', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'fileChange',
-        id: 'fc_1',
-        name: 'write_file',
-        arguments: '{"file_path":"test.txt","content":"hello"}',
-      }],
+      input: [
+        {
+          type: 'fileChange',
+          id: 'fc_1',
+          name: 'write_file',
+          arguments: '{"file_path":"test.txt","content":"hello"}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });

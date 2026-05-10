@@ -8,11 +8,17 @@ describe('targeted branch coverage', () => {
   // fetch.ts line 574-575: lastUserMessageHasImage returning false after loop
   it('lastUserMessageHasImage returns false for user message without images', async () => {
     const upstream: typeof fetch = async (_input, init) => {
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetchFn = createResponsesFetch({
@@ -29,7 +35,9 @@ describe('targeted branch coverage', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         model: 'claude',
-        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] }],
+        input: [
+          { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+        ],
       }),
     });
     // Should not throw
@@ -53,18 +61,22 @@ describe('targeted branch coverage', () => {
   it('openai translateResponse handles tool call without id', () => {
     const res = openaiTranslateResponse({
       id: 'chatcmpl-1',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: null,
-          tool_calls: [{
-            type: 'function',
-            function: { name: 'shell', arguments: '{"command":["ls"]}' },
-          }],
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                type: 'function',
+                function: { name: 'shell', arguments: '{"command":["ls"]}' },
+              },
+            ],
+          },
+          finish_reason: 'tool_calls',
         },
-        finish_reason: 'tool_calls',
-      }],
+      ],
     });
     const item = res.output[0] as { id: string; call_id: string };
     expect(item.id).toBeTruthy();
@@ -84,17 +96,21 @@ describe('targeted branch coverage', () => {
   it('handles function arguments as object in mapToolCallToOutput', () => {
     const res = openaiTranslateResponse({
       id: 'x',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          tool_calls: [{
-            id: 'call_1',
-            type: 'function',
-            function: { name: 'test_tool', arguments: { q: 'test' } as never },
-          }],
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'test_tool', arguments: { q: 'test' } as never },
+              },
+            ],
+          },
         },
-      }],
+      ],
     });
     expect(res.output.length).toBe(1);
   });
@@ -103,17 +119,21 @@ describe('targeted branch coverage', () => {
   it('handles shell tool call with null arguments parse', () => {
     const res = openaiTranslateResponse({
       id: 'x',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          tool_calls: [{
-            id: 'call_sh',
-            type: 'function',
-            function: { name: 'shell', arguments: 'invalid json' },
-          }],
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            tool_calls: [
+              {
+                id: 'call_sh',
+                type: 'function',
+                function: { name: 'shell', arguments: 'invalid json' },
+              },
+            ],
+          },
         },
-      }],
+      ],
     });
     const item = res.output[0] as { type: string; action: { command: string[] } };
     expect(item.type).toBe('local_shell_call');

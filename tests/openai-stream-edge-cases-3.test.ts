@@ -7,8 +7,14 @@ describe('openai translateStream - remaining branch coverage', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Hello","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"shell","arguments":"{\\"command\\":[\\"ls\\"]}"}}]}}]}\n\n'));
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":" world"}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Hello","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"shell","arguments":"{\\"command\\":[\\"ls\\"]}"}}]}}]}\n\n',
+          ),
+        );
+        c.enqueue(
+          encoder.encode('data: {"choices":[{"index":0,"delta":{"content":" world"}}]}\n\n'),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -17,7 +23,7 @@ describe('openai translateStream - remaining branch coverage', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const doneEvents = events.filter(e => e.type === 'response.output_item.done');
+    const doneEvents = events.filter((e) => e.type === 'response.output_item.done');
     expect(doneEvents.length).toBe(2);
   });
 
@@ -25,7 +31,11 @@ describe('openai translateStream - remaining branch coverage', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_sh","type":"function","function":{"name":"shell","arguments":"{\\"command\\":[\\"ls\\"]}"}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_sh","type":"function","function":{"name":"shell","arguments":"{\\"command\\":[\\"ls\\"]}"}}]}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -34,10 +44,12 @@ describe('openai translateStream - remaining branch coverage', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const doneEvents = events.filter(e => e.type === 'response.output_item.done');
+    const doneEvents = events.filter((e) => e.type === 'response.output_item.done');
     expect(doneEvents.length).toBe(1);
-    // eslint-disable-next-line no-restricted-syntax -- test needs wider type
-    const doneEvent = doneEvents[0] as unknown as { item: { type: string; action: { command: string[] } } };
+
+    const doneEvent = doneEvents[0] as unknown as {
+      item: { type: string; action: { command: string[] } };
+    };
     expect(doneEvent.item.type).toBe('local_shell_call');
   });
 
@@ -45,8 +57,16 @@ describe('openai translateStream - remaining branch coverage', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n'));
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n',
+          ),
+        );
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -55,7 +75,7 @@ describe('openai translateStream - remaining branch coverage', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const argEvents = events.filter(e => e.type === 'response.function_call_arguments.delta');
+    const argEvents = events.filter((e) => e.type === 'response.function_call_arguments.delta');
     expect(argEvents.length).toBe(1);
   });
 
@@ -63,7 +83,11 @@ describe('openai translateStream - remaining branch coverage', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Hello"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":2}}}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Hello"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":2}}}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -72,7 +96,7 @@ describe('openai translateStream - remaining branch coverage', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const completed = events.find(e => e.type === 'response.completed');
+    const completed = events.find((e) => e.type === 'response.completed');
     expect(completed).toBeDefined();
   });
 });

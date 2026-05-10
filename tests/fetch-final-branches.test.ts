@@ -4,11 +4,17 @@ import { createResponsesFetch } from '../src/fetch.js';
 describe('fetch - last branches', () => {
   it('handles empty content-type by acting as JSON', async () => {
     const upstream: typeof fetch = async () => {
-      return new Response(JSON.stringify({
-        id: 'msg_1', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: {} });
+      return new Response(
+        JSON.stringify({
+          id: 'msg_1',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: {} },
+      );
     };
 
     const fetch = createResponsesFetch({

@@ -6,11 +6,13 @@ describe('openai translateRequest tool mapping coverage', () => {
   it('handles assistant message with text reasoning', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: 'answer' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'answer' }],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -19,10 +21,12 @@ describe('openai translateRequest tool mapping coverage', () => {
   it('handles function_call with no name and no type fallback', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'function_call',
-        call_id: 'call_1',
-      } as never],
+      input: [
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+        } as never,
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -40,11 +44,13 @@ describe('openai translateRequest tool mapping coverage', () => {
   it('handles local_shell_call with action', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'local_shell_call',
-        id: 'sh_1',
-        action: { exec: { command: ['ls'] } },
-      }],
+      input: [
+        {
+          type: 'local_shell_call',
+          id: 'sh_1',
+          action: { exec: { command: ['ls'] } },
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -71,7 +77,9 @@ describe('openai translateRequest tool mapping coverage', () => {
   it('handles function_call with empty args and web_search_call', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{ type: 'web_search_call', id: 'ws_1', arguments: '{}', action: { action_type: 'search' } }],
+      input: [
+        { type: 'web_search_call', id: 'ws_1', arguments: '{}', action: { action_type: 'search' } },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -130,7 +138,7 @@ describe('openai translateRequest tool mapping coverage', () => {
         { type: 'function_call_output', call_id: 'call_1', output: {}, success: false },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 
@@ -161,7 +169,7 @@ describe('openai translateRequest tool mapping coverage', () => {
         { type: 'function_call_output', call_id: 'call_1', stderr: 'error occurred' },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 
@@ -174,7 +182,7 @@ describe('openai translateRequest tool mapping coverage', () => {
         { type: 'function_call_output', call_id: 'call_1', content: 'content', stdout: 'stdout' },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 

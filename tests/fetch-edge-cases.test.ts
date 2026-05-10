@@ -107,11 +107,17 @@ describe('fetch edge cases', () => {
       capturedHeaders = Object.fromEntries(
         Object.entries((init?.headers ?? {}) as Record<string, string>),
       );
-      return new Response(JSON.stringify({
-        id: 'msg_1', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg_1',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -127,7 +133,7 @@ describe('fetch edge cases', () => {
         'openai-organization': 'org-123',
         'openai-project': 'proj-456',
         'x-stainless-arch': 'arm64',
-        'originator': 'chatui',
+        originator: 'chatui',
       },
       body: JSON.stringify({ model: 'claude', input: 'hi' }),
     });
@@ -139,19 +145,23 @@ describe('fetch edge cases', () => {
     expect(capturedHeaders['originator']).toBeUndefined();
   });
 
-
-
   it('forwards x-api-key directly without authorization override', async () => {
     let capturedHeaders: Record<string, string> = {};
     const upstream: typeof fetch = async (_input, init) => {
       capturedHeaders = Object.fromEntries(
         Object.entries((init?.headers ?? {}) as Record<string, string>),
       );
-      return new Response(JSON.stringify({
-        id: 'x', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'x',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -174,16 +184,35 @@ describe('fetch edge cases', () => {
     const upstream: typeof fetch = async () => {
       const stream = new ReadableStream({
         start(controller) {
-          controller.enqueue(encoder.encode('data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[],"usage":{"input_tokens":3,"output_tokens":0}}}\n\n'));
-          controller.enqueue(encoder.encode('data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n'));
-          controller.enqueue(encoder.encode('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n'));
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-5","content":[],"usage":{"input_tokens":3,"output_tokens":0}}}\n\n',
+            ),
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+            ),
+          );
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n',
+            ),
+          );
           controller.enqueue(encoder.encode('data: {"type":"content_block_stop","index":0}\n\n'));
-          controller.enqueue(encoder.encode('data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}\n\n'));
+          controller.enqueue(
+            encoder.encode(
+              'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}\n\n',
+            ),
+          );
           controller.enqueue(encoder.encode('data: {"type":"message_stop"}\n\n'));
           controller.close();
         },
       });
-      return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
     };
 
     const fetch = createResponsesFetch({
@@ -209,7 +238,10 @@ describe('fetch edge cases', () => {
       upstreamFormat: 'anthropic',
       baseUrl: 'https://api.anthropic.com/v1/messages',
       fetch: async () => new Response('never'),
-      passthroughFetch: async () => { called = true; return new Response('ok'); },
+      passthroughFetch: async () => {
+        called = true;
+        return new Response('ok');
+      },
     });
 
     await fetch('https://api.openai.com/v1/responses', { method: 'GET' });
@@ -221,7 +253,17 @@ describe('fetch edge cases', () => {
     let primaryCalled = false;
     const upstream: typeof fetch = async () => {
       primaryCalled = true;
-      return new Response(JSON.stringify({ id: 'msg', type: 'message', role: 'assistant', model: 'claude', content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -244,11 +286,17 @@ describe('fetch edge cases', () => {
     let capturedBody = '';
     const upstream: typeof fetch = async (_input, init) => {
       capturedBody = String(init?.body ?? '');
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({

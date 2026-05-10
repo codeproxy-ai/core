@@ -16,9 +16,7 @@ describe('openai translateRequest - more branch coverage', () => {
   it('handles specific function_call types for empty arguments path', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [
-        { type: 'fileChange', id: 'fc_1', changes: [{ path: '/test.txt' }] },
-      ],
+      input: [{ type: 'fileChange', id: 'fc_1', changes: [{ path: '/test.txt' }] }],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -40,28 +38,31 @@ describe('openai translateRequest - more branch coverage', () => {
         { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'continue' }] },
       ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
   it('handles backfillReasoning false', () => {
-    const { request } = translateRequest({
-      model: 'gpt-4',
-      input: [
-        {
-          type: 'function_call',
-          call_id: 'call_1',
-          name: 'search',
-          arguments: '{}',
-        },
-        {
-          type: 'function_call_output',
-          call_id: 'call_1',
-          output: 'result',
-        },
-      ],
-    }, { backfillReasoning: false });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const { request } = translateRequest(
+      {
+        model: 'gpt-4',
+        input: [
+          {
+            type: 'function_call',
+            call_id: 'call_1',
+            name: 'search',
+            arguments: '{}',
+          },
+          {
+            type: 'function_call_output',
+            call_id: 'call_1',
+            output: 'result',
+          },
+        ],
+      },
+      { backfillReasoning: false },
+    );
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
@@ -91,7 +92,7 @@ describe('openai translateRequest - more branch coverage', () => {
         },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 });

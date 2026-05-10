@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { createResponsesFetch } from '../src/fetch.js';
 
 describe('fetch unreached branches', () => {
-
   // === fetch.ts: normalizeBaseUrl catch (line 151-152) ===
   // Invalid URL input for baseUrl
   it('handles URL with trailing slash and path normalization', async () => {
@@ -12,11 +11,17 @@ describe('fetch unreached branches', () => {
     let capturedUrl = '';
     const upstream: typeof fetch = async (input) => {
       capturedUrl = typeof input === 'string' ? input : input.toString();
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     // openai baseUrl starting with /v1/ should append /chat/completions
@@ -26,7 +31,8 @@ describe('fetch unreached branches', () => {
       fetch: upstream,
     });
     const res = await fetchFn('https://api.openai.com/v1/responses', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'deepseek-chat', input: 'hi' }),
     });
     expect(res.status).toBe(200);
@@ -37,11 +43,19 @@ describe('fetch unreached branches', () => {
   it('infers format from baseUrl patterns', async () => {
     // Use a url with unknown pattern -> should default to 'openai-chat'
     const upstream: typeof fetch = async (input) => {
-      return new Response(JSON.stringify({
-        id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: 'gpt-4',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'gpt-4',
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     // clean unknown format -> infers openai-chat
@@ -50,7 +64,8 @@ describe('fetch unreached branches', () => {
       fetch: upstream,
     });
     const res1 = await fetchFn1('https://api.openai.com/v1/responses', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'deepseek', input: 'hi' }),
     });
     expect(res1.status).toBe(200);
@@ -59,11 +74,17 @@ describe('fetch unreached branches', () => {
   // === fetch.ts: urlOf with various input types ===
   it('handles URL and Request inputs to urlOf', async () => {
     const upstream: typeof fetch = async (input) => {
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetchFn = createResponsesFetch({
@@ -80,11 +101,19 @@ describe('fetch unreached branches', () => {
   // === fetch.ts: extractRequest with Request instance (line 238-241) ===
   it('handles Request object input to extractRequest', async () => {
     const upstream: typeof fetch = async (input) => {
-      return new Response(JSON.stringify({
-        id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: 'gpt-4',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'gpt-4',
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetchFn = createResponsesFetch({
@@ -105,15 +134,34 @@ describe('fetch unreached branches', () => {
     const upstream: typeof fetch = async () => {
       const stream = new ReadableStream({
         start(c) {
-          c.enqueue(encoder.encode('data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"message_delta","delta":{},"usage":{"output_tokens":2}}\n\n'));
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"message_delta","delta":{},"usage":{"output_tokens":2}}\n\n',
+            ),
+          );
           c.enqueue(encoder.encode('data: {"type":"message_stop"}\n\n'));
           c.close();
         },
       });
-      return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
     };
 
     const fetchFn = createResponsesFetch({
@@ -131,7 +179,12 @@ describe('fetch unreached branches', () => {
     expect(res.headers.get('content-type')).toContain('text/event-stream');
     const reader = res.body?.getReader();
     if (reader) {
-      while (true) { const { done } = await reader.read(); if (done) break; }
+      while (true) {
+        const { done } = await reader.read();
+        if (done) {
+          break;
+        }
+      }
     }
   });
 });

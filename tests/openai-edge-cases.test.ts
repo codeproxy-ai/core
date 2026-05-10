@@ -28,7 +28,10 @@ describe('openai translateRequest edge cases', () => {
       instructions: ['Be helpful.', { text: 'Be concise.' }],
       input: 'hello',
     });
-    expect(request.messages[0]).toMatchObject({ role: 'system', content: 'Be helpful.Be concise.' });
+    expect(request.messages[0]).toMatchObject({
+      role: 'system',
+      content: 'Be helpful.Be concise.',
+    });
   });
 
   it('handles null/undefined items in input array', () => {
@@ -40,18 +43,23 @@ describe('openai translateRequest edge cases', () => {
   });
 
   it('handles input_image with data URL', () => {
-    const { request } = translateRequest({
-      model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [
-          { type: 'input_text', text: 'what is this?' },
-          { type: 'input_image', image_url: 'data:image/png;base64,AAA' },
+    const { request } = translateRequest(
+      {
+        model: 'gpt-4',
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'what is this?' },
+              { type: 'input_image', image_url: 'data:image/png;base64,AAA' },
+            ],
+          },
         ],
-      }],
-    }, { dropImages: false });
-    const userMsg = request.messages.find(m => m.role === 'user');
+      },
+      { dropImages: false },
+    );
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
@@ -72,7 +80,7 @@ describe('openai translateRequest edge cases', () => {
         },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 
@@ -93,7 +101,7 @@ describe('openai translateRequest edge cases', () => {
         },
       ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
@@ -114,7 +122,7 @@ describe('openai translateRequest edge cases', () => {
         },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
     expect(toolMsg?.content).toContain('error occurred');
   });
@@ -139,23 +147,23 @@ describe('openai translateRequest edge cases', () => {
         },
       ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
   it('handles custom tool call type', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'web_search_call',
-        id: 'ws_1',
-        action: { type: 'web_search' },
-      }],
+      input: [
+        {
+          type: 'web_search_call',
+          id: 'ws_1',
+          action: { type: 'web_search' },
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThan(0);
   });
-
-
 
   it('handles tool_choice with function object', () => {
     const { request } = translateRequest({
@@ -175,11 +183,13 @@ describe('openai translateResponse edge cases', () => {
       object: 'chat.completion',
       created: 1677652288,
       model: 'gpt-4',
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content: 'Hello' },
-        finish_reason: 'stop',
-      }],
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: 'Hello' },
+          finish_reason: 'stop',
+        },
+      ],
       usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
     });
     expect(res.status).toBe('completed');
@@ -194,22 +204,29 @@ describe('openai translateResponse edge cases', () => {
       object: 'chat.completion',
       created: 1677652288,
       model: 'gpt-4',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: null,
-          tool_calls: [{
-            id: 'call_1',
-            type: 'function',
-            function: { name: 'shell', arguments: '{"command":["ls"]}' },
-          }],
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'shell', arguments: '{"command":["ls"]}' },
+              },
+            ],
+          },
+          finish_reason: 'tool_calls',
         },
-        finish_reason: 'tool_calls',
-      }],
+      ],
       usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
     });
-    const toolCall = res.output[0] as { type: string; action?: { type: string; command: string[] } };
+    const toolCall = res.output[0] as {
+      type: string;
+      action?: { type: string; command: string[] };
+    };
     expect(toolCall.type).toBe('local_shell_call');
     expect(toolCall.action?.command).toEqual(['ls']);
   });
@@ -217,10 +234,12 @@ describe('openai translateResponse edge cases', () => {
   it('handles empty usage in response', () => {
     const res = translateResponse({
       id: 'x',
-      choices: [{
-        index: 0,
-        message: { role: 'assistant', content: 'Hi' },
-      }],
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: 'Hi' },
+        },
+      ],
     });
     expect(res.usage.input_tokens).toBe(0);
     expect(res.usage.output_tokens).toBe(0);
@@ -229,18 +248,22 @@ describe('openai translateResponse edge cases', () => {
   it('handles arguments as object in tool call', () => {
     const res = translateResponse({
       id: 'chatcmpl-123',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: null,
-          tool_calls: [{
-            id: 'call_1',
-            type: 'function',
-            function: { name: 'search', arguments: { q: 'test' } },
-          }],
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'search', arguments: { q: 'test' } },
+              },
+            ],
+          },
         },
-      }],
+      ],
     });
     const toolCall = res.output[0] as { arguments: string };
     expect(toolCall.arguments).toBe('{"q":"test"}');
@@ -249,13 +272,15 @@ describe('openai translateResponse edge cases', () => {
   it('handles tool call without name', () => {
     const res = translateResponse({
       id: 'x',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          tool_calls: [{ id: 'call_1', type: 'function', function: {} }],
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            tool_calls: [{ id: 'call_1', type: 'function', function: {} }],
+          },
         },
-      }],
+      ],
     });
     expect(res.output).toHaveLength(0);
   });
@@ -263,7 +288,11 @@ describe('openai translateResponse edge cases', () => {
 
 describe('openai translateStream edge cases', () => {
   it('handles empty stream', async () => {
-    const stream = new ReadableStream({ start(c) { c.close(); } });
+    const stream = new ReadableStream({
+      start(c) {
+        c.close();
+      },
+    });
     const events: ResponsesStreamEvent[] = [];
     for await (const evt of translateStream(stream)) {
       events.push(evt);
@@ -275,7 +304,11 @@ describe('openai translateStream edge cases', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -284,7 +317,7 @@ describe('openai translateStream edge cases', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const deltaEvent = events.find(e => e.type === 'response.output_text.delta');
+    const deltaEvent = events.find((e) => e.type === 'response.output_text.delta');
     expect(deltaEvent).toBeDefined();
   });
 
@@ -292,8 +325,16 @@ describe('openai translateStream edge cases', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n'));
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n',
+          ),
+        );
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: ${encodeSseEvent("done", "final")}\n\n'));
         c.close();
       },
@@ -302,7 +343,7 @@ describe('openai translateStream edge cases', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const addEvent = events.find(e => e.type === 'response.output_item.added');
+    const addEvent = events.find((e) => e.type === 'response.output_item.added');
     expect(addEvent).toBeDefined();
   });
 
@@ -310,7 +351,11 @@ describe('openai translateStream edge cases', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"Hello"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":2}}}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"content":"Hello"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":2}}}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -319,7 +364,7 @@ describe('openai translateStream edge cases', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const deltaEvent = events.find(e => e.type === 'response.output_text.delta');
+    const deltaEvent = events.find((e) => e.type === 'response.output_text.delta');
     expect(deltaEvent).toBeDefined();
   });
 
@@ -327,7 +372,11 @@ describe('openai translateStream edge cases', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"shell","arguments":"{\\"command\\":[\\"ls\\"]}"}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"shell","arguments":"{\\"command\\":[\\"ls\\"]}"}}]}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -336,7 +385,7 @@ describe('openai translateStream edge cases', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const addEvent = events.find(e => e.type === 'response.output_item.added');
+    const addEvent = events.find((e) => e.type === 'response.output_item.added');
     expect(addEvent).toBeDefined();
   });
 });

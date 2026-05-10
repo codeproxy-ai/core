@@ -82,21 +82,6 @@ npm install @codeproxy/core
 - `encodeSseEvent(event, data)` — 序列化 SSE 事件为线格式
 - `makeId(prefix)` — 生成单调递增的 ID
 
-## 测试与覆盖率
-
-| 指标 | 数值 |
-|---|---|
-| 语句覆盖率 | 95.35% |
-| 分支覆盖率 | 87.43% |
-| 函数覆盖率 | 97.46% |
-| 行覆盖率 | 95.35% |
-| 测试用例 | 361 个（41 个文件） |
-
-```bash
-pnpm test        # 运行测试
-pnpm test:coverage  # 运行测试并生成覆盖率报告
-```
-
 ## 协议
 
 MIT

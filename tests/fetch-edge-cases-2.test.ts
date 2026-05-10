@@ -9,22 +9,43 @@ describe('fetch additional edge cases', () => {
     const upstream: typeof fetch = async () => {
       const stream = new ReadableStream({
         start(c) {
-          c.enqueue(encoder.encode('data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":[],"usage":{"input_tokens":10,"output_tokens":0}}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}\n\n'));
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":[],"usage":{"input_tokens":10,"output_tokens":0}}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"message_delta","delta":{},"usage":{"output_tokens":5}}\n\n',
+            ),
+          );
           c.enqueue(encoder.encode('data: {"type":"message_stop"}\n\n'));
           c.close();
         },
       });
-      return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
     };
 
     const fetch = createResponsesFetch({
       upstreamFormat: 'anthropic',
       baseUrl: 'https://api.anthropic.com/v1/messages',
       fetch: upstream,
-      onCacheStats: (stats) => { capturedStats = stats; },
+      onCacheStats: (stats) => {
+        capturedStats = stats;
+      },
     });
 
     const res = await fetch('https://api.openai.com/v1/responses', {
@@ -36,7 +57,12 @@ describe('fetch additional edge cases', () => {
     // Consume the stream to trigger cache stats
     const reader = res.body?.getReader();
     if (reader) {
-      while (true) { const { done } = await reader.read(); if (done) break; }
+      while (true) {
+        const { done } = await reader.read();
+        if (done) {
+          break;
+        }
+      }
     }
 
     expect(capturedStats).not.toBeNull();
@@ -47,15 +73,34 @@ describe('fetch additional edge cases', () => {
     const upstream: typeof fetch = async () => {
       const stream = new ReadableStream({
         start(c) {
-          c.enqueue(encoder.encode('data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":[],"usage":{"input_tokens":3,"output_tokens":0}}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}\n\n'));
-          c.enqueue(encoder.encode('data: {"type":"message_delta","delta":{},"usage":{"output_tokens":2}}\n\n'));
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude","content":[],"usage":{"input_tokens":3,"output_tokens":0}}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}\n\n',
+            ),
+          );
+          c.enqueue(
+            encoder.encode(
+              'data: {"type":"message_delta","delta":{},"usage":{"output_tokens":2}}\n\n',
+            ),
+          );
           c.enqueue(encoder.encode('data: {"type":"message_stop"}\n\n'));
           c.close();
         },
       });
-      return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
     };
 
     const fetch = createResponsesFetch({
@@ -101,13 +146,21 @@ describe('fetch additional edge cases', () => {
     let capturedAuth: string | undefined;
 
     const upstream: typeof fetch = async (_input, init) => {
-      const hdrs = Object.fromEntries(Object.entries((init?.headers ?? {}) as Record<string, string>));
+      const hdrs = Object.fromEntries(
+        Object.entries((init?.headers ?? {}) as Record<string, string>),
+      );
       capturedAuth = hdrs['authorization'];
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -130,13 +183,21 @@ describe('fetch additional edge cases', () => {
     let capturedVersion: string | undefined;
 
     const upstream: typeof fetch = async (_input, init) => {
-      const hdrs = Object.fromEntries(Object.entries((init?.headers ?? {}) as Record<string, string>));
+      const hdrs = Object.fromEntries(
+        Object.entries((init?.headers ?? {}) as Record<string, string>),
+      );
       capturedVersion = hdrs['anthropic-version'];
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -160,11 +221,17 @@ describe('fetch additional edge cases', () => {
 
     const upstream: typeof fetch = async (input) => {
       capturedUrl = typeof input === 'string' ? input : input.toString();
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -180,14 +247,16 @@ describe('fetch additional edge cases', () => {
       headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
       body: JSON.stringify({
         model: 'gpt-4',
-        input: [{
-          type: 'message',
-          role: 'user',
-          content: [
-            { type: 'input_text', text: 'desc' },
-            { type: 'input_image', image_url: 'https://example.com/img.png' },
-          ],
-        }],
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'desc' },
+              { type: 'input_image', image_url: 'https://example.com/img.png' },
+            ],
+          },
+        ],
       }),
     });
 
@@ -199,11 +268,17 @@ describe('fetch additional edge cases', () => {
 
     const upstream: typeof fetch = async (input) => {
       capturedUrl = typeof input === 'string' ? input : input.toString();
-      return new Response(JSON.stringify({
-        id: 'msg', type: 'message', role: 'assistant', model: 'claude',
-        content: [{ type: 'text', text: 'ok' }],
-        usage: { input_tokens: 1, output_tokens: 1 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'msg',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude',
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     // No explicit upstreamFormat - should infer from baseUrl

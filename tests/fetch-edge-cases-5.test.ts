@@ -4,14 +4,19 @@ import { createResponsesFetch } from '../src/fetch.js';
 describe('fetch - stream cancel and remaining branches', () => {
   it('handles baseUrl normalization for openai with custom path', async () => {
     const upstream: typeof fetch = async (input) => {
-      return new Response(JSON.stringify({
-        id: 'chatcmpl-1',
-        object: 'chat.completion',
-        created: 1,
-        model: 'gpt-4',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'gpt-4',
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -29,14 +34,19 @@ describe('fetch - stream cancel and remaining branches', () => {
 
   it('handles inference from baseUrl with deepseek type path', async () => {
     const upstream: typeof fetch = async (input) => {
-      return new Response(JSON.stringify({
-        id: 'chatcmpl-1',
-        object: 'chat.completion',
-        created: 1,
-        model: 'deepseek-chat',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'deepseek-chat',
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -54,14 +64,19 @@ describe('fetch - stream cancel and remaining branches', () => {
 
   it('handles content-type with charset', async () => {
     const upstream: typeof fetch = async () => {
-      return new Response(JSON.stringify({
-        id: 'chatcmpl-1',
-        object: 'chat.completion',
-        created: 1,
-        model: 'gpt-4',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'gpt-4',
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } },
+      );
     };
 
     const fetch = createResponsesFetch({
@@ -80,14 +95,19 @@ describe('fetch - stream cancel and remaining branches', () => {
 
   it('handles unexpected path that does not contain standard path segments', async () => {
     const upstream: typeof fetch = async (input) => {
-      return new Response(JSON.stringify({
-        id: 'chatcmpl-1',
-        object: 'chat.completion',
-        created: 1,
-        model: 'gpt-4',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-1',
+          object: 'chat.completion',
+          created: 1,
+          model: 'gpt-4',
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
     };
 
     // Inference from baseUrl should work for openai standard /v1

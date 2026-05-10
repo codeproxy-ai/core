@@ -28,11 +28,13 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles string parts in array content', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: ['hello ', 'world'],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: ['hello ', 'world'],
+        },
+      ],
     });
     expect(request.messages[0].role).toBe('user');
   });
@@ -41,15 +43,18 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('extractMessageText with array content', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'message',
-        role: 'system',
-        content: ['line1', { type: 'text', text: 'line2' }],
-      }, {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: 'hi' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'system',
+          content: ['line1', { type: 'text', text: 'line2' }],
+        },
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hi' }],
+        },
+      ],
     });
     expect(request.system).toBeDefined();
   });
@@ -66,11 +71,13 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles commandExecution tool call', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'commandExecution',
-        id: 'exec_1',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'commandExecution',
+          id: 'exec_1',
+          arguments: '{}',
+        },
+      ],
     });
     // Should work without crashing
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
@@ -79,11 +86,13 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles local_shell_call tool call', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'local_shell_call',
-        id: 'sh_1',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'local_shell_call',
+          id: 'sh_1',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -91,11 +100,13 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles fileChange tool call', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'fileChange',
-        id: 'fc_1',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'fileChange',
+          id: 'fc_1',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -103,11 +114,13 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles web_search_call tool call', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'web_search_call',
-        id: 'ws_1',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'web_search_call',
+          id: 'ws_1',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -116,11 +129,13 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles function_call with no name and unknown type', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'function_call',
-        call_id: 'call_1',
-        name: undefined,
-      } as never],
+      input: [
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: undefined,
+        } as never,
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -129,12 +144,14 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles tool with array input for arguments', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'function_call',
-        call_id: 'call_1',
-        name: 'search',
-        input: [],
-      }],
+      input: [
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: 'search',
+          input: [],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -157,9 +174,7 @@ describe('anthropic translateRequest tool mapping coverage', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
       input: 'hi',
-      tools: [
-        { type: 'function', function: { name: 'good', parameters: { type: 'object' } } },
-      ],
+      tools: [{ type: 'function', function: { name: 'good', parameters: { type: 'object' } } }],
       tool_choice: 'auto',
     });
     expect(request.tools).toBeDefined();
@@ -168,19 +183,39 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   // Line 469-480: tool_choice handling
   it('handles various tool_choice values', () => {
     // none
-    const r1 = translateRequest({ model: 'claude', input: 'hi', tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }], tool_choice: 'none' });
+    const r1 = translateRequest({
+      model: 'claude',
+      input: 'hi',
+      tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }],
+      tool_choice: 'none',
+    });
     expect(r1.request.tool_choice).toBeUndefined();
 
     // auto
-    const r2 = translateRequest({ model: 'claude', input: 'hi', tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }], tool_choice: 'auto' });
+    const r2 = translateRequest({
+      model: 'claude',
+      input: 'hi',
+      tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }],
+      tool_choice: 'auto',
+    });
     expect(r2.request.tool_choice).toEqual({ type: 'auto' });
 
     // object with function name
-    const r3 = translateRequest({ model: 'claude', input: 'hi', tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }], tool_choice: { type: 'function', function: { name: 's' } } });
+    const r3 = translateRequest({
+      model: 'claude',
+      input: 'hi',
+      tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }],
+      tool_choice: { type: 'function', function: { name: 's' } },
+    });
     expect(r3.request.tool_choice).toBeDefined();
 
     // object with auto type
-    const r4 = translateRequest({ model: 'claude', input: 'hi', tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }], tool_choice: { type: 'auto' } });
+    const r4 = translateRequest({
+      model: 'claude',
+      input: 'hi',
+      tools: [{ type: 'function', function: { name: 's', parameters: { type: 'object' } } }],
+      tool_choice: { type: 'auto' },
+    });
     expect(r4.request.tool_choice).toBeDefined();
   });
 
@@ -223,7 +258,7 @@ describe('anthropic translateRequest tool mapping coverage', () => {
         },
       ],
     });
-    const userMessages = request.messages.filter(m => m.role === 'user');
+    const userMessages = request.messages.filter((m) => m.role === 'user');
     expect(userMessages.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -239,7 +274,7 @@ describe('anthropic translateRequest tool mapping coverage', () => {
         },
       ],
     });
-    const userMsg = request.messages.find(m => m.role === 'user');
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
@@ -251,11 +286,14 @@ describe('anthropic translateRequest tool mapping coverage', () => {
         {
           type: 'message',
           role: 'user',
-          content: [{ type: 'text', text: '' }, { type: 'text', text: 'valid' }],
+          content: [
+            { type: 'text', text: '' },
+            { type: 'text', text: 'valid' },
+          ],
         },
       ],
     });
-    const userMsg = request.messages.find(m => m.role === 'user');
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
@@ -263,13 +301,15 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('sanitizeMessage handles string content', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: 'plain string',
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: 'plain string',
+        },
+      ],
     });
-    const userMsg = request.messages.find(m => m.role === 'user');
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
@@ -277,9 +317,7 @@ describe('anthropic translateRequest tool mapping coverage', () => {
   it('handles input items with null role', () => {
     const { request } = translateRequest({
       model: 'claude-sonnet-4-5',
-      input: [
-        { type: null as never, role: 'user', content: 'hello' },
-      ],
+      input: [{ type: null as never, role: 'user', content: 'hello' }],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });

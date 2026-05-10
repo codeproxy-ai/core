@@ -16,7 +16,7 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
       instructions: 'Be helpful',
       input: 'hello',
     });
-    const systemMsg = request.messages.find(m => m.role === 'system');
+    const systemMsg = request.messages.find((m) => m.role === 'system');
     expect(systemMsg).toBeDefined();
   });
 
@@ -37,19 +37,21 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
         { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'continue' }] },
       ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
   it('handles processInputItem with function_call but no name', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'function_call',
-        call_id: 'call_1',
-        name: 'search',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: 'search',
+          arguments: '{}',
+        },
+      ],
     });
     // Should not crash
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
@@ -58,12 +60,14 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
   it('handles processInputItem with commandExecution type', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'commandExecution',
-        id: 'exec_1',
-        name: 'run_shell_command',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'commandExecution',
+          id: 'exec_1',
+          name: 'run_shell_command',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -71,12 +75,14 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
   it('handles processInputItem with local_shell_call type', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'local_shell_call',
-        id: 'sh_1',
-        name: 'local_shell_command',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'local_shell_call',
+          id: 'sh_1',
+          name: 'local_shell_command',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -84,12 +90,14 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
   it('handles processInputItem with fileChange type', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'fileChange',
-        id: 'fc_1',
-        name: 'write_file',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'fileChange',
+          id: 'fc_1',
+          name: 'write_file',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -97,12 +105,14 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
   it('handles processInputItem with custom_tool_call type', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'custom_tool_call',
-        id: 'ct_1',
-        name: 'my_tool',
-        arguments: '{}',
-      }],
+      input: [
+        {
+          type: 'custom_tool_call',
+          id: 'ct_1',
+          name: 'my_tool',
+          arguments: '{}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -110,11 +120,13 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
   it('handles processInputItem with web_search_call type', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'web_search_call',
-        id: 'ws_1',
-        action: { type: 'web_search' },
-      }],
+      input: [
+        {
+          type: 'web_search_call',
+          id: 'ws_1',
+          action: { type: 'web_search' },
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -137,7 +149,7 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
         },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 
@@ -165,7 +177,7 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
         },
       ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
@@ -210,18 +222,25 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
   });
 
   it('handles dropImages filtering', () => {
-    const { request } = translateRequest({
-      model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [
-          { type: 'input_text', text: 'desc' },
-          { type: 'input_image', image_url: 'https://example.com/img.png' },
+    const { request } = translateRequest(
+      {
+        model: 'gpt-4',
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'desc' },
+              { type: 'input_image', image_url: 'https://example.com/img.png' },
+            ],
+          },
         ],
-      }],
-    }, { dropImages: true });
-    const userMsg = request.messages.find(m => m.role === 'user') as { content: Array<{ type: string }> };
+      },
+      { dropImages: true },
+    );
+    const userMsg = request.messages.find((m) => m.role === 'user') as {
+      content: Array<{ type: string }>;
+    };
     const imageParts = userMsg.content.filter((p: { type: string }) => p.type === 'image_url');
     expect(imageParts.length).toBe(0);
   });
@@ -239,7 +258,10 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
       input: 'hi',
-      tools: [null as unknown as never, { type: 'function', function: { name: 'search', parameters: { type: 'object' } } }],
+      tools: [
+        null as unknown as never,
+        { type: 'function', function: { name: 'search', parameters: { type: 'object' } } },
+      ],
     });
     expect(request.tools).toBeDefined();
   });
@@ -249,18 +271,20 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
       model: 'gpt-4',
       input: [null as unknown as never, 'hello'],
     });
-    const userMsg = request.messages.find(m => m.role === 'user');
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
   it('handles function_call with empty input and web_search_call fallback action', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'web_search_call',
-        id: 'ws_2',
-        action: { action_type: 'search' },
-      }],
+      input: [
+        {
+          type: 'web_search_call',
+          id: 'ws_2',
+          action: { action_type: 'search' },
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });
@@ -268,13 +292,15 @@ describe('openai translateRequest - repairToolMessageOrder edge cases', () => {
   it('handles function_call with commandExecution type and empty args fallback', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'commandExecution',
-        id: 'exec_2',
-        name: 'run_shell_command',
-        command: 'ls',
-        cwd: '/tmp',
-      }],
+      input: [
+        {
+          type: 'commandExecution',
+          id: 'exec_2',
+          name: 'run_shell_command',
+          command: 'ls',
+          cwd: '/tmp',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });

@@ -15,7 +15,7 @@ describe('anthropic translateResponse - branch coverage', () => {
     const result = mapOutputItems([
       { type: 'tool_use', id: 'call_1', input: { q: 'test' } },
     ] as never[]);
-    // eslint-disable-next-line no-restricted-syntax -- test needs wider type
+
     const item = result[0] as { name: string };
     expect(item.name).toBe('tool');
   });
@@ -24,7 +24,7 @@ describe('anthropic translateResponse - branch coverage', () => {
     const result = mapOutputItems([
       { type: 'tool_use', id: 'call_sh', name: 'shell', input: { command: 'ls -la' } },
     ] as never[]);
-    // eslint-disable-next-line no-restricted-syntax -- test needs wider type
+
     const item = result[0] as { type: string; action: { command: string[] } };
     expect(item.type).toBe('local_shell_call');
     // Command string (not array) should result in empty array
@@ -35,16 +35,14 @@ describe('anthropic translateResponse - branch coverage', () => {
     const result = mapOutputItems([
       { type: 'tool_use', id: 'call_2', name: 'shell', input: null },
     ] as never[]);
-    // eslint-disable-next-line no-restricted-syntax -- test needs wider type
+
     const item = result[0] as { type: string; arguments: string };
     expect(item.type).toBe('local_shell_call');
     expect(item.arguments).toBe('{}');
   });
 
   it('handles thinking block with null/undefined text', () => {
-    const result = mapOutputItems([
-      { type: 'thinking' },
-    ] as never[]);
+    const result = mapOutputItems([{ type: 'thinking' }] as never[]);
     const item = result[0] as { type: string; content: Array<{ text: string }> };
     expect(item.type).toBe('reasoning');
     expect(item.content[0].text).toBe('');

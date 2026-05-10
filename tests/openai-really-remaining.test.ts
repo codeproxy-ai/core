@@ -6,13 +6,15 @@ describe('openai translateRequest final remaining', () => {
   it('handles developer role', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'developer',
-        content: [{ type: 'input_text', text: 'be helpful' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'developer',
+          content: [{ type: 'input_text', text: 'be helpful' }],
+        },
+      ],
     });
-    const systemMsg = request.messages.find(m => m.role === 'system');
+    const systemMsg = request.messages.find((m) => m.role === 'system');
     expect(systemMsg).toBeDefined();
   });
 
@@ -20,11 +22,13 @@ describe('openai translateRequest final remaining', () => {
   it('handles array content in assistant messages', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: 'hello' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'hello' }],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -46,7 +50,7 @@ describe('openai translateRequest final remaining', () => {
         { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'continue' }] },
       ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
@@ -66,13 +70,15 @@ describe('openai translateRequest final remaining', () => {
   it('handles user message with string parts', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: ['hello ', 'world'],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: ['hello ', 'world'],
+        },
+      ],
     });
-    const userMsg = request.messages.find(m => m.role === 'user');
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
@@ -80,13 +86,15 @@ describe('openai translateRequest final remaining', () => {
   it('handles input_text type in message content', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: 'hello' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hello' }],
+        },
+      ],
     });
-    const userMsg = request.messages.find(m => m.role === 'user');
+    const userMsg = request.messages.find((m) => m.role === 'user');
     expect(userMsg).toBeDefined();
   });
 
@@ -94,11 +102,13 @@ describe('openai translateRequest final remaining', () => {
   it('handles image_url with file data', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_image', file_data: 'file:///path/to/img.png' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_image', file_data: 'file:///path/to/img.png' }],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -107,11 +117,19 @@ describe('openai translateRequest final remaining', () => {
   it('handles input_file with file_data', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_file', file_data: 'file:///path/to/doc.pdf', mime_type: 'application/pdf' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_file',
+              file_data: 'file:///path/to/doc.pdf',
+              mime_type: 'application/pdf',
+            },
+          ],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -120,18 +138,21 @@ describe('openai translateRequest final remaining', () => {
   it('handles assistant message with reasoning_content', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text: 'answer' }],
-        reasoning_content: 'thinking step by step',
-      }, {
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: 'continue' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'answer' }],
+          reasoning_content: 'thinking step by step',
+        },
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'continue' }],
+        },
+      ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
@@ -139,11 +160,13 @@ describe('openai translateRequest final remaining', () => {
   it('handles message with text-only content', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'message',
-        role: 'user',
-        content: [{ type: 'input_text', text: 'hi' }],
-      }],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'hi' }],
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(1);
   });
@@ -198,7 +221,7 @@ describe('openai translateRequest final remaining', () => {
         { type: 'commandExecutionOutput', call_id: 'call_1', output: 'result' },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 
@@ -208,10 +231,14 @@ describe('openai translateRequest final remaining', () => {
       model: 'gpt-4',
       input: [
         { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{}' },
-        { type: 'function_call_output', call_id: 'call_1', output: [{ type: 'some_type', text: 'result' }] },
+        {
+          type: 'function_call_output',
+          call_id: 'call_1',
+          output: [{ type: 'some_type', text: 'result' }],
+        },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 
@@ -221,10 +248,15 @@ describe('openai translateRequest final remaining', () => {
       model: 'gpt-4',
       input: [
         { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{}' },
-        { type: 'function_call_output', call_id: 'call_1', output: { message: 'fail' }, success: false },
+        {
+          type: 'function_call_output',
+          call_id: 'call_1',
+          output: { message: 'fail' },
+          success: false,
+        },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 
@@ -241,12 +273,14 @@ describe('openai translateRequest final remaining', () => {
   it('handles various isEmpty cases', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
-      input: [{
-        type: 'function_call',
-        call_id: 'call_1',
-        name: 'search',
-        arguments: '{"q":""}',
-      }],
+      input: [
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: 'search',
+          arguments: '{"q":""}',
+        },
+      ],
     });
     expect(request.messages.length).toBeGreaterThanOrEqual(0);
   });

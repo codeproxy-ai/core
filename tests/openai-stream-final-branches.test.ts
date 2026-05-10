@@ -8,9 +8,17 @@ describe('openai translateStream - fn name in second chunk', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n',
+          ),
+        );
         // Second chunk for same tool call: has a fn.name again
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"search","arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"name":"search","arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -19,7 +27,7 @@ describe('openai translateStream - fn name in second chunk', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const argEvents = events.filter(e => e.type === 'response.function_call_arguments.delta');
+    const argEvents = events.filter((e) => e.type === 'response.function_call_arguments.delta');
     expect(argEvents.length).toBe(1);
   });
 
@@ -27,7 +35,11 @@ describe('openai translateStream - fn name in second chunk', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":{"q":"test"}}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":{"q":"test"}}}]}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -36,7 +48,7 @@ describe('openai translateStream - fn name in second chunk', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const argEvents = events.filter(e => e.type === 'response.function_call_arguments.delta');
+    const argEvents = events.filter((e) => e.type === 'response.function_call_arguments.delta');
     expect(argEvents.length).toBe(1);
   });
 });

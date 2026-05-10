@@ -15,11 +15,17 @@ describe('openai translateRequest - repairToolMessageOrder edge', () => {
     const { request } = translateRequest({
       model: 'gpt-4',
       input: [
-        { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{"q":"test"}', thought: 'I should search' },
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: 'search',
+          arguments: '{"q":"test"}',
+          thought: 'I should search',
+        },
         { type: 'function_call_output', call_id: 'call_1', output: 'results' },
       ],
     });
-    const assistantMsg = request.messages.find(m => m.role === 'assistant');
+    const assistantMsg = request.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg).toBeDefined();
   });
 
@@ -28,10 +34,14 @@ describe('openai translateRequest - repairToolMessageOrder edge', () => {
       model: 'gpt-4',
       input: [
         { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{}' },
-        { type: 'function_call_output', call_id: 'call_1', output: [{ type: 'text', text: 'result' }] },
+        {
+          type: 'function_call_output',
+          call_id: 'call_1',
+          output: [{ type: 'text', text: 'result' }],
+        },
       ],
     });
-    const toolMsg = request.messages.find(m => m.role === 'tool');
+    const toolMsg = request.messages.find((m) => m.role === 'tool');
     expect(toolMsg).toBeDefined();
   });
 

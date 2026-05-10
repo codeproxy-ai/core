@@ -7,8 +7,16 @@ describe('openai translateStream - edge cases', () => {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(c) {
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n'));
-        c.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n'));
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":""}}]}}]}\n\n',
+          ),
+        );
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"test\\"}"}}]}}]}\n\n',
+          ),
+        );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
       },
@@ -17,7 +25,7 @@ describe('openai translateStream - edge cases', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const argEvents = events.filter(e => e.type === 'response.function_call_arguments.delta');
+    const argEvents = events.filter((e) => e.type === 'response.function_call_arguments.delta');
     expect(argEvents.length).toBe(1);
   });
 
@@ -34,7 +42,7 @@ describe('openai translateStream - edge cases', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const completed = events.find(e => e.type === 'response.completed');
+    const completed = events.find((e) => e.type === 'response.completed');
     expect(completed).toBeDefined();
   });
 
@@ -51,7 +59,7 @@ describe('openai translateStream - edge cases', () => {
     for await (const evt of translateStream(stream)) {
       events.push(evt);
     }
-    const completed = events.find(e => e.type === 'response.completed');
+    const completed = events.find((e) => e.type === 'response.completed');
     expect(completed).toBeDefined();
   });
 });
