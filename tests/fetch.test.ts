@@ -1167,3 +1167,73 @@ it('fallback infers anthropic format from claude model name', async () => {
   expect(capturedUrl).toBe('https://api.anthropic.com/v1/messages');
   expect(capturedUrl).not.toContain('/chat/completions');
 });
+
+it('ensures max_tokens > thinking.budget_tokens for anthropic upstream', async () => {
+  let capturedBody = '';
+  const upstream: typeof fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedBody = String(init?.body ?? '');
+    return new Response(
+      JSON.stringify({
+        id: 'msg_mt',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-7',
+        content: [{ type: 'text', text: 'ok' }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const fetchImpl = createResponsesFetch({
+    upstreamFormat: 'anthropic',
+    baseUrl: 'https://api.anthropic.com/v1/messages',
+    fetch: upstream,
+    reasoning_effort: 'medium',
+  });
+
+  await fetchImpl('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+  });
+
+  const upstreamBody = JSON.parse(capturedBody);
+  expect(upstreamBody.max_tokens).toBeGreaterThan(upstreamBody.thinking.budget_tokens);
+});
+
+it('does not adjust max_tokens when already greater than thinking budget_tokens', async () => {
+  let capturedBody = '';
+  const upstream: typeof fetch = async (_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedBody = String(init?.body ?? '');
+    return new Response(
+      JSON.stringify({
+        id: 'msg_mt2',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-7',
+        content: [{ type: 'text', text: 'ok' }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const fetchImpl = createResponsesFetch({
+    upstreamFormat: 'anthropic',
+    baseUrl: 'https://api.anthropic.com/v1/messages',
+    fetch: upstream,
+    reasoning_effort: 'low',
+  });
+
+  await fetchImpl('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello', max_output_tokens: 8192 }),
+  });
+
+  const upstreamBody = JSON.parse(capturedBody);
+  // budget_tokens=4096 for low, max_tokens=8192 > 4096, should keep 8192
+  expect(upstreamBody.max_tokens).toBe(8192);
+  expect(upstreamBody.thinking).toEqual({ type: 'enabled', budget_tokens: 4096 });
+});
