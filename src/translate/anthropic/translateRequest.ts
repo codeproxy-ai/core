@@ -66,15 +66,25 @@ export function translateRequest(
     options.defaultMaxTokens ||
     8192;
 
-  const systemBlocks: AnthropicTextBlock[] = extractSystemBlocks(data.instructions);
+  let systemBlocks: AnthropicTextBlock[] = extractSystemBlocks(data.instructions);
 
   const built = buildMessages(data, systemBlocks);
   let messages = built.messages;
-  const hasPromptCache = built.hasPromptCache;
+  let hasPromptCache = built.hasPromptCache;
+
+  if (data.prompt_cache_key) {
+    hasPromptCache = true;
+    systemBlocks = markBlocksForCache(systemBlocks);
+    messages = markCacheBreakpoint(messages);
+  }
 
   messages = repairToolAdjacency(messages);
   messages = sanitizeMessages(messages);
   messages = ensureEndsWithUser(messages);
+
+  if (data.prompt_cache_key) {
+    messages = markCacheBreakpoint(messages);
+  }
 
   const request: AnthropicRequest = {
     model,
@@ -256,7 +266,16 @@ function buildMessages(data: ResponsesRequest, systemBlocks: AnthropicTextBlock[
               contentPart.type === 'text' ||
               contentPart.type === 'output_text'
             ) {
-              contentBlocks.push({ type: 'text', text: String(contentPart.text ?? '') });
+              const textBlock: AnthropicContentBlock = {
+                type: 'text',
+                text: String(contentPart.text ?? ''),
+              };
+              // eslint-disable-next-line no-restricted-syntax -- ResponsesContentPart union doesn't expose cache_control
+              const cc = (contentPart as { cache_control?: Record<string, unknown> }).cache_control;
+              if (cc) {
+                textBlock.cache_control = cc;
+              }
+              contentBlocks.push(textBlock);
             } else if (
               contentPart.type === 'input_image' ||
               contentPart.type === 'image' ||
@@ -631,4 +650,57 @@ function ensureEndsWithUser(messages: AnthropicMessage[]): AnthropicMessage[] {
     return messages;
   }
   return [...messages, { role: 'user', content: [{ type: 'text', text: 'Continue.' }] }];
+}
+
+// ── prompt_cache_key → cache_control helpers ──
+
+function markBlocksForCache(blocks: AnthropicTextBlock[]): AnthropicTextBlock[] {
+  for (const block of blocks) {
+    if (!block.cache_control) {
+      block.cache_control = { type: 'ephemeral' };
+    }
+  }
+  return blocks;
+}
+
+/**
+ * Mark a stable cache breakpoint on the last assistant message's last text block.
+ * Falls back to the first user message if there's no assistant message (first turn).
+ *
+ * The last assistant message won't change across turns, so the cache key stays
+ * stable and can be reused for subsequent requests (unlike the last user message
+ * which contains the new input each time).
+ */
+function markCacheBreakpoint(messages: AnthropicMessage[]): AnthropicMessage[] {
+  // First assistant is at a fixed position from turn 2 onwards
+  for (const msg of messages) {
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      for (let j = msg.content.length - 1; j >= 0; j--) {
+        const block = msg.content[j];
+        if (block.type === 'text') {
+          if (!block.cache_control) {
+            block.cache_control = { type: 'ephemeral' };
+          }
+          return messages;
+        }
+      }
+    }
+  }
+
+  // First turn: no assistant yet, mark the first user message's last text block
+  for (const msg of messages) {
+    if (msg.role === 'user' && Array.isArray(msg.content)) {
+      for (let j = msg.content.length - 1; j >= 0; j--) {
+        const block = msg.content[j];
+        if (block.type === 'text') {
+          if (!block.cache_control) {
+            block.cache_control = { type: 'ephemeral' };
+          }
+          return messages;
+        }
+      }
+    }
+  }
+
+  return messages;
 }

@@ -169,4 +169,156 @@ describe('translateRequest (Responses -> Anthropic)', () => {
       { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'BBB' } },
     ]);
   });
+
+  // ── prompt_cache_key → cache_control ──
+
+  it('adds cache_control to system blocks when prompt_cache_key is present', () => {
+    const { request, hasPromptCache } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      instructions: 'You are helpful.',
+      input: 'Hello',
+      prompt_cache_key: 'test-key-123',
+    });
+    expect(hasPromptCache).toBe(true);
+    expect(request.system).toEqual([
+      { type: 'text', text: 'You are helpful.', cache_control: { type: 'ephemeral' } },
+    ]);
+  });
+
+  it('marks first user message when no assistant exists (first turn)', () => {
+    const { request } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'first' }] },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'last' }] },
+      ],
+      prompt_cache_key: 'test-key-456',
+    });
+    // No assistant: first user message's last text block gets cache_control
+    const firstMsg = request.messages[0];
+    if (!Array.isArray(firstMsg.content)) {
+      throw new Error('expected array');
+    }
+    expect(firstMsg.content[0]).toMatchObject({
+      type: 'text',
+      text: 'first',
+      cache_control: { type: 'ephemeral' },
+    });
+    // Last user message should NOT have cache_control
+    const lastMsg = request.messages[request.messages.length - 1];
+    if (!Array.isArray(lastMsg.content)) {
+      throw new Error('expected array');
+    }
+    expect(lastMsg.content[0]).not.toHaveProperty('cache_control');
+  });
+
+  it('marks first assistant message when present (multi-turn)', () => {
+    const { request } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'q1' }] },
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'a1' }] },
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'a2' }] },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'q2' }] },
+      ],
+      prompt_cache_key: 'test-key-789',
+    });
+    // The FIRST assistant message's last text block gets cache_control
+    const firstAssistant = request.messages.find((m) => m.role === 'assistant');
+    if (!firstAssistant || !Array.isArray(firstAssistant.content)) {
+      throw new Error('expected array');
+    }
+    expect(firstAssistant.content[0]).toMatchObject({
+      type: 'text',
+      text: 'a1',
+      cache_control: { type: 'ephemeral' },
+    });
+    // Second assistant should NOT have cache_control
+    const assistants = request.messages.filter((m) => m.role === 'assistant');
+    const secondAssistant = assistants[1];
+    if (!secondAssistant || !Array.isArray(secondAssistant.content)) {
+      throw new Error('expected array');
+    }
+    expect(secondAssistant.content[0]).not.toHaveProperty('cache_control');
+  });
+
+  it('does not add cache_control when prompt_cache_key is absent', () => {
+    const { request, hasPromptCache } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      instructions: 'You are helpful.',
+      input: 'Hello',
+    });
+    expect(hasPromptCache).toBe(false);
+    if (request.system) {
+      for (const block of request.system) {
+        expect(block).not.toHaveProperty('cache_control');
+      }
+    }
+    const lastMsg = request.messages[request.messages.length - 1];
+    if (Array.isArray(lastMsg.content)) {
+      for (const block of lastMsg.content) {
+        expect(block).not.toHaveProperty('cache_control');
+      }
+    }
+  });
+
+  it('preserves existing cache_control on text content blocks', () => {
+    const { request } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: 'cached text',
+              cache_control: { type: 'ephemeral' },
+            },
+          ],
+        },
+      ],
+    });
+    expect(request.messages[0].content).toEqual([
+      {
+        type: 'text',
+        text: 'cached text',
+        cache_control: { type: 'ephemeral' },
+      },
+    ]);
+  });
+
+  it('does not overwrite existing cache_control when prompt_cache_key is present', () => {
+    const { request } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      instructions: [{ text: 'system', cache_control: { type: 'custom' } } as never],
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: 'final',
+              cache_control: { type: 'custom' },
+            },
+          ],
+        },
+      ],
+      prompt_cache_key: 'key',
+    });
+    // Existing cache_control should NOT be overwritten
+    if (request.system) {
+      expect((request.system[0] as { cache_control?: unknown }).cache_control).toEqual({
+        type: 'custom',
+      });
+    }
+    const lastMsg = request.messages[request.messages.length - 1];
+    if (!Array.isArray(lastMsg.content)) {
+      throw new Error('expected array');
+    }
+    expect((lastMsg.content[0] as { cache_control?: unknown }).cache_control).toEqual({
+      type: 'custom',
+    });
+  });
 });
