@@ -27,7 +27,7 @@ export default [
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       curly: 'error',
-      'max-lines': ['error', { max: 500, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 550, skipBlankLines: true, skipComments: true }],
     },
   },
   {

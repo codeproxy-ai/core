@@ -409,6 +409,14 @@ function buildUpstreamBody(
         ar.thinking = { type: 'enabled', budget_tokens: 65536 };
       }
     }
+    // Ensure max_tokens > thinking.budget_tokens (Anthropic requirement)
+    if (ar.thinking && typeof ar.thinking === 'object' && 'budget_tokens' in ar.thinking) {
+      // eslint-disable-next-line no-restricted-syntax -- runtime-checked budget_tokens from thinking config
+      const budget = Number((ar.thinking as unknown as Record<string, unknown>).budget_tokens);
+      if (budget > 0 && ar.max_tokens <= budget) {
+        ar.max_tokens = budget + 1024;
+      }
+    }
     return {
       upstreamBody: ar,
       requestMetadata: buildRequestMetadata(request, ar.temperature, ar.top_p),
