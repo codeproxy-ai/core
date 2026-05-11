@@ -175,6 +175,17 @@ function inferFormatFromUrl(baseUrl: string): UpstreamFormat | null {
   return null;
 }
 
+/** Infer upstream format from model name. */
+function inferFormatFromModel(model: string | undefined): UpstreamFormat | null {
+  if (!model) {
+    return null;
+  }
+  if (/^claude/i.test(model)) {
+    return 'anthropic';
+  }
+  return null;
+}
+
 // ── request extraction ──
 
 function isResponsesEndpoint(url: string): boolean {
@@ -280,7 +291,11 @@ async function handleResponses(
     dropImages = false;
     const fb = options.fallbackUpstream;
     options = { ...options, ...fb, fallbackUpstream: undefined };
-    format = fb.upstreamFormat ?? format;
+    format =
+      fb.upstreamFormat ??
+      inferFormatFromUrl(fb.baseUrl) ??
+      inferFormatFromModel(fb.model) ??
+      format;
     if (options.model) {
       request.model = options.model;
     }

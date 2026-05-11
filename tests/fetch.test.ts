@@ -1116,3 +1116,54 @@ it('uses fallback model when configured without dropImages (direct model overrid
 // ==============================================================================
 // Direct model override
 // ==============================================================================
+
+it('fallback infers anthropic format from claude model name', async () => {
+  let capturedUrl = '';
+  const upstream: typeof fetch = async (input: RequestInfo | URL, _init?: RequestInit) => {
+    capturedUrl = typeof input === 'string' ? input : input.toString();
+    return new Response(
+      JSON.stringify({
+        id: 'msg_fb',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-7',
+        content: [{ type: 'text', text: 'ok' }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const fetchImpl = createResponsesFetch({
+    upstreamFormat: 'openai-chat',
+    baseUrl: 'https://primary.com/v1',
+    fetch: upstream,
+    dropImages: true,
+    fallbackUpstream: {
+      baseUrl: 'https://api.anthropic.com/v1/messages',
+      model: 'claude-sonnet-4-7',
+    },
+  });
+
+  await fetchImpl('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
+    body: JSON.stringify({
+      model: 'deepseek-v4-flash',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'desc' },
+            { type: 'input_image', image_url: 'https://example.com/img.png' },
+          ],
+        },
+      ],
+    }),
+  });
+
+  // Should infer anthropic format from model name "claude-sonnet-4-7"
+  expect(capturedUrl).toBe('https://api.anthropic.com/v1/messages');
+  expect(capturedUrl).not.toContain('/chat/completions');
+});
