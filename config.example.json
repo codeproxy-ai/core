@@ -20,6 +20,15 @@
       "apiKey": "",
       "model": "gpt-4o-mini",
       "headers": {}
+    },
+    "kimi": {
+      "baseUrl": "https://api.kimi.com/coding/v1",
+      "apiKey": "sk-kimi-...",
+      "model": "kimi-for-coding",
+      "headers": {
+        "user-agent": "KimiCLI/1.39.0"
+      }
     }
-  }
+  },
+  "port": 8787
 }

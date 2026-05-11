@@ -23,7 +23,7 @@ const client = new OpenAI({
 });
 
 const response = await client.responses.create({
-  model: 'deepseek-v4-pro',
+  model: 'deepseek-v4-flash',
   input: 'Hello!',
 });
 ```
