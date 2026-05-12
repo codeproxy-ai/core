@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { translateRequest } from '../src/translate/anthropic/translateRequest.js';
+import type { AnthropicTextBlock } from '../src/types/anthropic.js';
 
 describe('translateRequest (Responses -> Anthropic)', () => {
   it('maps simple string input + instructions', () => {
@@ -320,5 +321,25 @@ describe('translateRequest (Responses -> Anthropic)', () => {
     expect((lastMsg.content[0] as { cache_control?: unknown }).cache_control).toEqual({
       type: 'custom',
     });
+  });
+
+  it('limits system block cache_control to 3 when prompt_cache_key is present', () => {
+    const { request } = translateRequest({
+      model: 'claude-sonnet-4-5',
+      input: [
+        { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 's1' }] },
+        { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 's2' }] },
+        { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 's3' }] },
+        { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 's4' }] },
+        { type: 'message', role: 'developer', content: [{ type: 'input_text', text: 's5' }] },
+        { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+      ],
+      prompt_cache_key: 'test-key-limit',
+    });
+    // System blocks should exist (5 developer messages + any other)
+    expect(request.system).toBeDefined();
+    // Only first 3 system blocks should have cache_control
+    const cachedBlocks = (request.system as AnthropicTextBlock[]).filter((b) => b.cache_control);
+    expect(cachedBlocks.length).toBeLessThanOrEqual(3);
   });
 });

@@ -123,4 +123,38 @@ describe('fetch - stream cancel and remaining branches', () => {
     });
     expect(res.status).toBe(200);
   });
+
+  it('infers anthropic format from claude model name when baseUrl has no indicator', async () => {
+    let requestUrl = '';
+    const upstream: typeof fetch = async (input) => {
+      requestUrl = typeof input === 'string' ? input : input.url;
+      return new Response(
+        JSON.stringify({
+          id: 'msg_1',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-sonnet-4-6',
+          content: [{ type: 'text', text: 'hi' }],
+          usage: { input_tokens: 5, output_tokens: 1 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    };
+
+    // baseUrl has no format indicator, but model starts with "claude"
+    const fetch = createResponsesFetch({
+      baseUrl: 'https://aihubmix.com/v1',
+      model: 'claude-sonnet-4-6',
+      fetch: upstream,
+    });
+
+    const res = await fetch('http://local/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', input: 'hi' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(requestUrl).toBe('https://aihubmix.com/v1/messages');
+  });
 });

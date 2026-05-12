@@ -655,9 +655,14 @@ function ensureEndsWithUser(messages: AnthropicMessage[]): AnthropicMessage[] {
 // ── prompt_cache_key → cache_control helpers ──
 
 function markBlocksForCache(blocks: AnthropicTextBlock[]): AnthropicTextBlock[] {
+  // Anthropic allows at most 4 cache_control breakpoints total.
+  // Reserve 1 for the conversation breakpoint, leaving 3 for system blocks.
+  let count = 0;
   for (const block of blocks) {
     if (!block.cache_control) {
       block.cache_control = { type: 'ephemeral' };
+      count++;
+      if (count >= 3) break;
     }
   }
   return blocks;

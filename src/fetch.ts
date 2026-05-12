@@ -78,9 +78,7 @@ export function createResponsesFetch(options: CreateResponsesFetchOptions): type
   const rawFormat = options.upstreamFormat;
   const format = rawFormat
     ? normalizeFormat(rawFormat)
-    : (inferFormatFromUrl(options.baseUrl) ??
-        inferFormatFromModel(options.model) ??
-        'openai-chat');
+    : (inferFormatFromUrl(options.baseUrl) ?? inferFormatFromModel(options.model) ?? 'openai-chat');
   if (!format) {
     throw new Error(
       `Unsupported upstream format: ${options.upstreamFormat}. Use 'anthropic' or 'openai-chat'`,

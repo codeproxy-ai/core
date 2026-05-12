@@ -175,6 +175,8 @@ class StreamTranslator {
     const items: { index: number; item: ResponsesOutputItem }[] = [];
 
     if (this.textItem) {
+      this.textItem.status = 'completed';
+      this.textItem.content[0].text = this.textBuffer;
       items.push({ index: this.textItemIndex, item: this.textItem });
     }
 
