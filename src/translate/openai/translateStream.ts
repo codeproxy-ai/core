@@ -2,7 +2,11 @@
 // Stream Translator
 // ==============================================================================
 
-import type { OpenAiChatStreamChunk, OpenAiChatStreamDelta } from '../../types/openai_chat.js';
+import type {
+  OpenAiChatStreamChunk,
+  OpenAiChatStreamDelta,
+  OpenAiChatStreamDeltaToolCall,
+} from '../../types/openai_chat.js';
 import type {
   ResponsesOutputFunctionCall,
   ResponsesOutputItem,
@@ -155,6 +159,10 @@ class StreamTranslator {
         }
 
         const fn = tc.function;
+        const thoughtSignature = getThoughtSignature(tc);
+        if (thoughtSignature) {
+          state.item.thought_signature = thoughtSignature;
+        }
         if (fn?.name) {
           state.item.name = (state.item.name ?? '') + fn.name;
         }
@@ -277,4 +285,9 @@ class StreamTranslator {
       ...data,
     };
   }
+}
+
+function getThoughtSignature(tc: OpenAiChatStreamDeltaToolCall): string | undefined {
+  const sig = tc.extra_content?.google?.thought_signature ?? tc.thought_signature;
+  return typeof sig === 'string' && sig ? sig : undefined;
 }

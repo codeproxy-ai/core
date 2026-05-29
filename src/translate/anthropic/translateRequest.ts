@@ -662,7 +662,9 @@ function markBlocksForCache(blocks: AnthropicTextBlock[]): AnthropicTextBlock[] 
     if (!block.cache_control) {
       block.cache_control = { type: 'ephemeral' };
       count++;
-      if (count >= 3) break;
+      if (count >= 3) {
+        break;
+      }
     }
   }
   return blocks;

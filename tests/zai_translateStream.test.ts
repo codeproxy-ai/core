@@ -189,6 +189,45 @@ describe('translateStream (Zai SSE -> Responses events)', () => {
     expect(functionCallDeltas.length).toBeGreaterThan(0);
   });
 
+  it('preserves Gemini OpenAI thought signatures in streamed tool calls', async () => {
+    const body = [
+      encodeSseEvent('chat.completion.chunk', {
+        id: 'chatcmpl-gemini',
+        object: 'chat.completion.chunk',
+        created: 1677652288,
+        model: 'google/gemini-3.5-flash',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  type: 'function',
+                  extra_content: {
+                    google: { thought_signature: 'sig_stream' },
+                  },
+                  function: { name: 'search', arguments: '{"q":"foo"}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      }),
+    ].join('');
+
+    const events = await collect(translateStream(makeByteStream([body])));
+    const done = events.find((evt) => evt.type === 'response.output_item.done');
+    expect(done).toMatchObject({
+      item: {
+        type: 'function_call',
+        thought_signature: 'sig_stream',
+      },
+    });
+  });
+
   it('handles shell tool calls as local_shell_call', async () => {
     const body = [
       encodeSseEvent('chat.completion.chunk', {

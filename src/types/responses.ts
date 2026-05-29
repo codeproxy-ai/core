@@ -74,6 +74,7 @@ export interface ResponsesFunctionCallItem {
   call_id?: string;
   name?: string;
   arguments?: string | Record<string, unknown>;
+  thought_signature?: string;
   [key: string]: unknown;
 }
 
@@ -220,6 +221,7 @@ export interface ResponsesOutputFunctionCall {
   name?: string;
   arguments?: string;
   call_id?: string;
+  thought_signature?: string;
   action?: { type?: string; command?: string[] };
 }
 

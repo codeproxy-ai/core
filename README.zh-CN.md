@@ -62,7 +62,10 @@ npm install @codeproxy/core
 | `dropImages` | `boolean` | 从消息中移除图片部分（纯文本模型） |
 | `timeoutMs` | `number` | 上游请求超时 |
 | `onCacheStats` | `(stats) => void` | 接收缓存使用统计 |
+| `fallbackThoughtSignature` | `string` | Gemini OpenAI 兼容工具调用历史的兜底 thought signature |
 | `fallbackUpstream` | `object` | 当 `dropImages: true` 且请求包含图片时，自动切换到该上游（如支持视觉的模型） |
+
+Gemini OpenAI 兼容工具调用会在 Responses function-call item 中保留 `thought_signature`。迁移旧历史时，如果历史里没有上游返回的 signature，可以传入 `fallbackThoughtSignature`，让下一次上游工具调用请求继续带上 `extra_content.google.thought_signature`。
 
 ### 转换器
 

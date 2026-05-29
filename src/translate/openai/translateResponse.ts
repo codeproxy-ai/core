@@ -90,6 +90,10 @@ function mapToolCallToOutput(tc: OpenAiChatToolCall): ResponsesOutputFunctionCal
     arguments: args,
     call_id: callId,
   };
+  const thoughtSignature = getThoughtSignature(tc);
+  if (thoughtSignature) {
+    item.thought_signature = thoughtSignature;
+  }
 
   if (SHELL_TOOL_NAMES.has(name)) {
     item.type = 'local_shell_call';
@@ -98,4 +102,9 @@ function mapToolCallToOutput(tc: OpenAiChatToolCall): ResponsesOutputFunctionCal
   }
 
   return item;
+}
+
+function getThoughtSignature(tc: OpenAiChatToolCall): string | undefined {
+  const sig = tc.extra_content?.google?.thought_signature ?? tc.thought_signature;
+  return typeof sig === 'string' && sig ? sig : undefined;
 }

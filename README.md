@@ -62,7 +62,10 @@ Creates a `fetch` wrapper that translates Responses API traffic to the configure
 | `dropImages` | `boolean` | Strip image parts from messages (text-only models) |
 | `timeoutMs` | `number` | Upstream request timeout |
 | `onCacheStats` | `(stats) => void` | Receive cache usage stats |
+| `fallbackThoughtSignature` | `string` | Fallback Gemini thought signature for OpenAI-compatible tool call histories |
 | `fallbackUpstream` | `object` | When `dropImages: true` and the request contains images, automatically route to this upstream instead (e.g. a vision-capable model) |
+
+Gemini OpenAI-compatible tool calls preserve `thought_signature` through Responses function-call items. When migrating old histories that do not include a returned signature, pass `fallbackThoughtSignature` so the next upstream tool-call request can still include `extra_content.google.thought_signature`.
 
 ### Translators
 

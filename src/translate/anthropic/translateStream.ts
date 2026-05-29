@@ -12,7 +12,7 @@ import type {
   ResponsesStreamEvent,
 } from '../../types/responses.js';
 import { parseSseStream, type SseMessage } from '../../utils/sse.js';
-import { safeJsonParse } from '../../utils/json.js';
+import { safeJsonParse, jsonStringifySafe } from '../../utils/json.js';
 import { makeId } from '../../utils/id.js';
 
 export interface TranslateStreamOptions {
@@ -303,15 +303,26 @@ class StreamTranslator {
     if (btype === 'tool_use') {
       const outputIndex = this.outputCounter++;
       const callId = block.id ?? makeId('call');
+      // Some proxies return the full input directly in content_block_start
+      const initialInput =
+        typeof block.input === 'object' && block.input !== null
+          ? jsonStringifySafe(block.input)
+          : '';
+      const hasInitialInput = initialInput !== '' && initialInput !== '{}';
       const item: ResponsesOutputFunctionCall = {
         id: callId,
         type: 'function_call',
         status: 'in_progress',
         name: block.name ?? '',
-        arguments: '',
+        arguments: hasInitialInput ? initialInput : '',
         call_id: callId,
       };
-      this.blocks.set(index, { type: 'tool_use', outputIndex, item, buffer: '' });
+      this.blocks.set(index, {
+        type: 'tool_use',
+        outputIndex,
+        item,
+        buffer: hasInitialInput ? initialInput : '',
+      });
       yield this.makeEvent('response.output_item.added', {
         response_id: this.responseId,
         output_index: outputIndex,

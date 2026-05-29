@@ -13,6 +13,7 @@ import type {
   OpenAiChatMessage,
   OpenAiChatRequest,
   OpenAiChatTool,
+  OpenAiChatToolCall,
   OpenAiChatToolChoice,
 } from '../../types/openai_chat.js';
 import { makeId } from '../../utils/id.js';
@@ -28,6 +29,8 @@ export interface TranslateRequestOptions {
   /** If true, strip `strict` from function tools (some upstreams reject it). */
   /** If true, drop image/file parts from user messages (e.g. DeepSeek text-only models). */
   dropImages?: boolean;
+  /** Fallback signature for Gemini OpenAI histories that lack returned signatures. */
+  fallbackThoughtSignature?: string;
 }
 
 export interface TranslateRequestResult {
@@ -58,7 +61,7 @@ export function translateRequest(
       continue;
     }
     const rawItem: Record<string, unknown> = raw;
-    processInputItem(rawItem, messages, options.dropImages);
+    processInputItem(rawItem, messages, options);
   }
 
   const request: OpenAiChatRequest = {
@@ -139,7 +142,7 @@ function buildSystemContent(instructions: ResponsesRequest['instructions']): str
 function processInputItem(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
-  dropImages?: boolean,
+  options: TranslateRequestOptions,
 ): void {
   const itemType: string = String(item.type) || 'message';
 
@@ -222,7 +225,7 @@ function processInputItem(
               contentPart.type === 'image' ||
               contentPart.type === 'image_url'
             ) {
-              if (dropImages) {
+              if (options.dropImages) {
                 continue;
               }
               let url = '';
@@ -316,7 +319,7 @@ function processInputItem(
     itemType === 'custom_tool_call' ||
     itemType === 'web_search_call'
   ) {
-    processToolCall(item, messages, getLastAssistant);
+    processToolCall(item, messages, getLastAssistant, options.fallbackThoughtSignature);
     return;
   }
 
@@ -335,6 +338,7 @@ function processToolCall(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
   getLastAssistant: () => OpenAiChatMessage,
+  fallbackThoughtSignature?: string,
 ): void {
   const callId: string = String(item.call_id ?? '') || String(item.id ?? '') || makeId('call');
   let name: string | undefined = item.name === undefined ? undefined : String(item.name);
@@ -391,17 +395,19 @@ function processToolCall(
   if (!amsg.tool_calls) {
     amsg.tool_calls = [];
   }
-  amsg.tool_calls.push({
+  const toolCall: OpenAiChatToolCall = {
     id: callId,
     type: 'function',
     function: { name, arguments: argsStr },
-  });
+  };
 
-  const sig = item.thought_signature;
+  const sig = item.thought_signature ?? fallbackThoughtSignature;
   const thought = item.thought;
   if (typeof sig === 'string' && sig) {
+    toolCall.extra_content = { google: { thought_signature: sig } };
     amsg.thought_signature = sig;
   }
+  amsg.tool_calls.push(toolCall);
   if (typeof thought === 'string' && thought) {
     amsg.reasoning_content = (amsg.reasoning_content ?? '') + thought;
   }

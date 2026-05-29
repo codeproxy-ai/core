@@ -128,6 +128,42 @@ describe('translateResponse (Zai -> Responses)', () => {
     expect(item.type).toBe('local_shell_call');
   });
 
+  it('preserves Gemini OpenAI thought signatures on tool calls', () => {
+    const res = translateResponse({
+      id: 'chatcmpl-gemini',
+      object: 'chat.completion',
+      created: 1677652288,
+      model: 'google/gemini-3.5-flash',
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                extra_content: {
+                  google: { thought_signature: 'sig_a' },
+                },
+                function: {
+                  name: 'search',
+                  arguments: '{"q":"foo"}',
+                },
+              },
+            ],
+          },
+          finish_reason: 'tool_calls',
+        },
+      ],
+    });
+
+    expect(res.output[0]).toMatchObject({
+      type: 'function_call',
+      thought_signature: 'sig_a',
+    });
+  });
+
   it('handles text-only response', () => {
     const res = translateResponse({
       id: 'chatcmpl-000',

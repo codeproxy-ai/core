@@ -6,10 +6,18 @@
 export interface OpenAiChatToolCall {
   id?: string;
   type?: 'function' | string;
+  extra_content?: {
+    google?: {
+      thought_signature?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
   function?: {
     name?: string;
     arguments?: string | Record<string, unknown>;
   };
+  thought_signature?: string;
 }
 
 export interface OpenAiChatMessage {
@@ -102,10 +110,12 @@ export interface OpenAiChatStreamDeltaToolCall {
   index: number;
   id?: string;
   type?: string;
+  extra_content?: OpenAiChatToolCall['extra_content'];
   function?: {
     name?: string;
     arguments?: string | Record<string, unknown>;
   };
+  thought_signature?: string;
 }
 
 export interface OpenAiChatStreamDelta {

@@ -105,6 +105,39 @@ describe('translateRequest (Responses -> Zai)', () => {
     expect(assistant!.reasoning_content).toBe('thinking...');
   });
 
+  it('places thought_signature on Gemini OpenAI tool call extra_content', () => {
+    const { request } = translateRequest({
+      model: 'google/gemini-3.5-flash',
+      input: [
+        {
+          type: 'function_call',
+          call_id: 'call_1',
+          name: 'search',
+          arguments: '{}',
+          thought_signature: 'sig_1',
+        },
+      ],
+    });
+    const assistant = request.messages.find((msg) => msg.role === 'assistant');
+    expect(assistant?.tool_calls?.[0]?.extra_content).toEqual({
+      google: { thought_signature: 'sig_1' },
+    });
+  });
+
+  it('can add a fallback Gemini thought signature for migrated histories', () => {
+    const { request } = translateRequest(
+      {
+        model: 'google/gemini-3.5-flash',
+        input: [{ type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{}' }],
+      },
+      { fallbackThoughtSignature: 'skip_thought_signature_validator' },
+    );
+    const assistant = request.messages.find((msg) => msg.role === 'assistant');
+    expect(assistant?.tool_calls?.[0]?.extra_content).toEqual({
+      google: { thought_signature: 'skip_thought_signature_validator' },
+    });
+  });
+
   it('maps temperature and top_p', () => {
     const { request } = translateRequest(
       {

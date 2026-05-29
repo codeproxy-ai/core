@@ -46,6 +46,8 @@ export interface CreateResponsesFetchOptions {
   passthroughFetch?: typeof fetch;
   /** Drop image/file parts from user messages (e.g. DeepSeek text-only models). */
   dropImages?: boolean;
+  /** Fallback thought signature for Gemini OpenAI-compatible tool histories. */
+  fallbackThoughtSignature?: string;
   /** Optional callback to receive cache statistics. */
   onCacheStats?: (stats: CacheStats) => void;
   /** Override reasoning_effort sent to the upstream model (OpenAI Chat / Anthropic). */
@@ -313,6 +315,7 @@ async function handleResponses(
     dropImages,
     options.reasoning_effort,
     options.thinking,
+    options.fallbackThoughtSignature,
   );
   const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
 
@@ -388,6 +391,7 @@ function buildUpstreamBody(
   dropImages?: boolean,
   reasoning_effort?: string,
   thinking?: unknown,
+  fallbackThoughtSignature?: string,
 ): { upstreamBody: unknown; requestMetadata: ReturnType<typeof buildRequestMetadata> } {
   if (format === 'anthropic') {
     const { request: ar } = anthropic.translateRequest(request);
@@ -422,7 +426,10 @@ function buildUpstreamBody(
       requestMetadata: buildRequestMetadata(request, ar.temperature, ar.top_p),
     };
   }
-  const { request: cr } = openai.translateRequest(request, { dropImages: dropImages });
+  const { request: cr } = openai.translateRequest(request, {
+    dropImages: dropImages,
+    fallbackThoughtSignature,
+  });
   cr.stream = streaming;
   if (streaming) {
     cr.stream_options = { include_usage: true };
