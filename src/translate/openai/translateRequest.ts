@@ -18,7 +18,6 @@ import type {
 } from '../../types/openai_chat.js';
 import { makeId } from '../../utils/id.js';
 import { jsonStringifySafe } from '../../utils/json.js';
-import { getValidFunctionNames, sanitizeJsonSchema } from './toolSchema.js';
 
 export interface TranslateRequestOptions {
   /** Default max tokens when not provided. */
@@ -38,23 +37,12 @@ export interface TranslateRequestResult {
   request: OpenAiChatRequest;
 }
 
-interface TranslationContext {
-  validFunctionNames?: Set<string>;
-  ignoredToolCallIds: Set<string>;
-}
-
 /** Convert a Responses API request into an OpenAI Chat API request. */
 export function translateRequest(
   data: ResponsesRequest,
   options: TranslateRequestOptions = {},
 ): TranslateRequestResult {
   const messages: OpenAiChatMessage[] = [];
-  const tools = mapTools(data.tools ?? []);
-  const validFunctionNames = getValidFunctionNames(tools);
-  const context: TranslationContext = {
-    validFunctionNames,
-    ignoredToolCallIds: new Set(),
-  };
 
   const systemContent = buildSystemContent(data.instructions);
   if (systemContent) {
@@ -73,7 +61,7 @@ export function translateRequest(
       continue;
     }
     const rawItem: Record<string, unknown> = raw;
-    processInputItem(rawItem, messages, options, context);
+    processInputItem(rawItem, messages, options);
   }
 
   const request: OpenAiChatRequest = {
@@ -101,6 +89,7 @@ export function translateRequest(
     request.max_tokens = maxTokens;
   }
 
+  const tools = mapTools(data.tools ?? []);
   if (tools.length) {
     request.tools = tools;
     const toolChoice = mapToolChoice(data.tool_choice);
@@ -154,7 +143,6 @@ function processInputItem(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
   options: TranslateRequestOptions,
-  context: TranslationContext,
 ): void {
   const itemType: string = String(item.type) || 'message';
 
@@ -331,7 +319,7 @@ function processInputItem(
     itemType === 'custom_tool_call' ||
     itemType === 'web_search_call'
   ) {
-    processToolCall(item, messages, getLastAssistant, options.fallbackThoughtSignature, context);
+    processToolCall(item, messages, getLastAssistant, options.fallbackThoughtSignature);
     return;
   }
 
@@ -341,21 +329,16 @@ function processInputItem(
     itemType === 'fileChangeOutput' ||
     itemType === 'custom_tool_call_output'
   ) {
-    processToolOutput(item, messages, context);
+    processToolOutput(item, messages);
     return;
   }
 }
-
-// ==============================================================================
-// Tool History
-// ==============================================================================
 
 function processToolCall(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
   getLastAssistant: () => OpenAiChatMessage,
   fallbackThoughtSignature?: string,
-  context?: TranslationContext,
 ): void {
   const callId: string = String(item.call_id ?? '') || String(item.id ?? '') || makeId('call');
   let name: string | undefined = item.name === undefined ? undefined : String(item.name);
@@ -408,15 +391,6 @@ function processToolCall(
     return;
   }
 
-  if (context?.validFunctionNames?.size && !context.validFunctionNames.has(name)) {
-    context.ignoredToolCallIds.add(callId);
-    const amsg = getLastAssistant();
-    const note = `Unsupported tool call omitted: ${name}`;
-    amsg.content =
-      typeof amsg.content === 'string' && amsg.content ? `${amsg.content}\n${note}` : note;
-    return;
-  }
-
   const amsg = getLastAssistant();
   if (!amsg.tool_calls) {
     amsg.tool_calls = [];
@@ -440,11 +414,7 @@ function processToolCall(
   void messages;
 }
 
-function processToolOutput(
-  item: Record<string, unknown>,
-  messages: OpenAiChatMessage[],
-  context?: TranslationContext,
-): void {
+function processToolOutput(item: Record<string, unknown>, messages: OpenAiChatMessage[]): void {
   const callId: string | undefined = item.call_id === undefined ? undefined : String(item.call_id);
   const outputRaw = item.output ?? item.content ?? item.stdout ?? '';
 
@@ -475,16 +445,6 @@ function processToolOutput(
     content = `Error: ${item.stderr}`;
   }
 
-  if (callId && context?.ignoredToolCallIds.has(callId)) {
-    if (content) {
-      messages.push({
-        role: 'user',
-        content: `Output for omitted unsupported tool call: ${content}`,
-      });
-    }
-    return;
-  }
-
   messages.push({
     role: 'tool',
     tool_call_id: callId,
@@ -495,8 +455,8 @@ function processToolOutput(
 // ==============================================================================
 // Tool Mapping
 // ==============================================================================
-
 function mapTools(tools: ResponsesTool[]): OpenAiChatTool[] {
+  /** If true, drop image/file parts from user messages (e.g. DeepSeek text-only models). */
   const out: OpenAiChatTool[] = [];
   for (const tool of tools) {
     if (!tool || typeof tool !== 'object') {
@@ -509,8 +469,7 @@ function mapTools(tools: ResponsesTool[]): OpenAiChatTool[] {
       if (!name) {
         continue;
       }
-      const rawParams = fn?.parameters ?? tool.parameters ?? { type: 'object' };
-      const params = sanitizeJsonSchema(rawParams);
+      const params = fn?.parameters ?? tool.parameters ?? { type: 'object' };
       out.push({
         type: 'function',
         function: {
