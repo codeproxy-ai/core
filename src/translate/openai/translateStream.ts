@@ -69,6 +69,20 @@ interface ToolCallState {
   item: ResponsesOutputFunctionCall;
 }
 
+function getToolCallKey(tc: OpenAiChatStreamDeltaToolCall, ordinal: number): string {
+  if (typeof tc.index === 'number') {
+    return `index:${tc.index}`;
+  }
+  if (tc.id) {
+    return `id:${tc.id}`;
+  }
+  return `ordinal:${ordinal}`;
+}
+
+// ==============================================================================
+// Stateful Event Translation
+// ==============================================================================
+
 class StreamTranslator {
   private readonly model: string;
   private readonly responseId: string;
@@ -81,7 +95,7 @@ class StreamTranslator {
   private textItemIndex = -1;
   private textBuffer = '';
 
-  private readonly toolCalls = new Map<number, ToolCallState>();
+  private readonly toolCalls = new Map<string, ToolCallState>();
 
   private inputTokens = 0;
   private outputTokens = 0;
@@ -135,9 +149,9 @@ class StreamTranslator {
     }
 
     if (delta.tool_calls?.length) {
-      for (const tc of delta.tool_calls) {
-        const idx = tc.index ?? 0;
-        let state = this.toolCalls.get(idx);
+      for (const [ordinal, tc] of delta.tool_calls.entries()) {
+        const key = getToolCallKey(tc, ordinal);
+        let state = this.toolCalls.get(key);
         if (!state) {
           const outputIndex = this.outputCounter++;
           const callId = tc.id ?? makeId('call');
@@ -150,7 +164,7 @@ class StreamTranslator {
             call_id: callId,
           };
           state = { outputIndex, item };
-          this.toolCalls.set(idx, state);
+          this.toolCalls.set(key, state);
           yield this.makeEvent('response.output_item.added', {
             response_id: this.responseId,
             output_index: outputIndex,
