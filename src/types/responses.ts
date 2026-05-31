@@ -219,6 +219,7 @@ export interface ResponsesOutputFunctionCall {
   type: 'function_call' | 'local_shell_call' | string;
   status: 'completed' | 'in_progress';
   name?: string;
+  namespace?: string;
   arguments?: string;
   call_id?: string;
   thought_signature?: string;

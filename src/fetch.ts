@@ -340,7 +340,10 @@ async function handleResponses(
         ? // eslint-disable-next-line no-restricted-syntax -- union type narrowing requires type assertion
           anthropic.translateResponse(body as AnthropicResponse, { model: request.model })
         : // eslint-disable-next-line no-restricted-syntax -- union type narrowing requires type assertion
-          openai.translateResponse(body as OpenAiChatResponse, { model: request.model });
+          openai.translateResponse(body as OpenAiChatResponse, {
+            model: request.model,
+            requestTools: request.tools ?? [],
+          });
     options.onCacheStats?.(extractCacheStatsFromResponse(translated));
     return new Response(JSON.stringify(translated), {
       status: 200,

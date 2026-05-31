@@ -139,6 +139,10 @@ function buildSystemContent(instructions: ResponsesRequest['instructions']): str
   return out;
 }
 
+// ==============================================================================
+// Input Processing
+// ==============================================================================
+
 function processInputItem(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
@@ -478,6 +482,36 @@ function mapTools(tools: ResponsesTool[]): OpenAiChatTool[] {
           parameters: params,
         },
       });
+      continue;
+    }
+    if (tt === 'namespace') {
+      // Flatten namespace sub-tools as "{namespace}.{tool}" function tools so
+      // Chat Completions upstreams (e.g. DeepSeek) can call them.  Codex
+      // dispatches tool calls by full dotted name, so the prefix is required.
+      const ns = tool.name;
+      // eslint-disable-next-line no-restricted-syntax -- ResponsesTool[] extraction from unknown index signature
+      const nested = tool.tools as ResponsesTool[] | undefined;
+      if (ns && Array.isArray(nested)) {
+        for (const sub of nested) {
+          if (!sub || typeof sub !== 'object' || sub.type !== 'function') {
+            continue;
+          }
+          const subName = sub.name;
+          if (!subName) {
+            continue;
+          }
+          const params = sub.parameters ?? { type: 'object' };
+          out.push({
+            type: 'function',
+            function: {
+              name: `${ns}.${subName}`,
+              description: sub.description ?? '',
+              // eslint-disable-next-line no-restricted-syntax -- schema is Record<string,unknown> by OpenAPI convention
+              parameters: params as Record<string, unknown>,
+            },
+          });
+        }
+      }
       continue;
     }
   }

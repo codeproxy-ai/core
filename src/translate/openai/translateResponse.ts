@@ -11,9 +11,58 @@ export interface TranslateResponseOptions {
   responseId?: string;
   createdAt?: number;
   model?: string;
+  /** Chat Completions tool list from the translated request — used to recover
+   *  namespace when the upstream omits the "namespace." prefix in a tool call. */
+  requestTools?: unknown[];
 }
 
 const SHELL_TOOL_NAMES = new Set(['shell', 'container.exec', 'shell_command']);
+
+// ==============================================================================
+// Namespace Tool Helpers
+// ==============================================================================
+
+/** Build shortName → namespace map — handles both flattened Chat Completions
+ *  tools ("ns.tool") and original Responses API namespace tools. */
+function buildShortNameToNamespace(tools: unknown[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const tool of tools) {
+    if (!tool || typeof tool !== 'object') {
+      continue;
+    }
+    // eslint-disable-next-line no-restricted-syntax -- Record extraction from unknown union
+    const entry = tool as Record<string, unknown>;
+    // eslint-disable-next-line no-restricted-syntax -- nested Record extraction
+    const fn = entry.function as Record<string, unknown> | undefined;
+    const flatName =
+      typeof fn?.name === 'string' ? fn.name : typeof entry.name === 'string' ? entry.name : '';
+    const dotIdx = flatName.indexOf('.');
+    if (dotIdx !== -1) {
+      map.set(flatName.slice(dotIdx + 1), flatName.slice(0, dotIdx));
+      continue;
+    }
+    if (
+      entry.type === 'namespace' &&
+      typeof entry.name === 'string' &&
+      Array.isArray(entry.tools)
+    ) {
+      const ns = entry.name;
+      // eslint-disable-next-line no-restricted-syntax -- unknown[] iteration over nested tools
+      for (const sub of entry.tools as unknown[]) {
+        if (!sub || typeof sub !== 'object') {
+          continue;
+        }
+        // eslint-disable-next-line no-restricted-syntax -- Record extraction from unknown
+        const subEntry = sub as Record<string, unknown>;
+        const subName = typeof subEntry.name === 'string' ? subEntry.name : '';
+        if (subName) {
+          map.set(subName, ns);
+        }
+      }
+    }
+  }
+  return map;
+}
 
 /** Convert an OpenAI Chat response into a Responses-API response. */
 export function translateResponse(
@@ -28,9 +77,10 @@ export function translateResponse(
   const message = choice?.message;
   const output: ResponsesOutputItem[] = [];
 
+  const shortNameToNs = buildShortNameToNamespace(options.requestTools ?? []);
   if (message?.tool_calls?.length) {
     for (const tc of message.tool_calls) {
-      const item = mapToolCallToOutput(tc);
+      const item = mapToolCallToOutput(tc, shortNameToNs);
       if (item) {
         output.push(item);
       }
@@ -71,7 +121,10 @@ export function translateResponse(
   };
 }
 
-function mapToolCallToOutput(tc: OpenAiChatToolCall): ResponsesOutputFunctionCall | undefined {
+function mapToolCallToOutput(
+  tc: OpenAiChatToolCall,
+  shortNameToNs?: Map<string, string>,
+): ResponsesOutputFunctionCall | undefined {
   const name = tc.function?.name;
   if (!name) {
     return undefined;
@@ -82,11 +135,28 @@ function mapToolCallToOutput(tc: OpenAiChatToolCall): ResponsesOutputFunctionCal
     args = jsonStringifySafe(args ?? {});
   }
 
+  // Restore namespace so codex can route the call to the correct handler.
+  // Skip splitting if the full name is already a known shell tool (e.g. "container.exec").
+  // Case 1: upstream preserved the prefix  → split on first dot.
+  // Case 2: upstream stripped the prefix   → look up the reverse map.
+  let resolvedName = name;
+  let resolvedNamespace: string | undefined;
+  if (!SHELL_TOOL_NAMES.has(name)) {
+    const dotIdx = name.indexOf('.');
+    if (dotIdx !== -1) {
+      resolvedNamespace = name.slice(0, dotIdx);
+      resolvedName = name.slice(dotIdx + 1);
+    } else {
+      resolvedNamespace = shortNameToNs?.get(name);
+    }
+  }
+
   const item: ResponsesOutputFunctionCall = {
     id: callId,
     type: 'function_call',
     status: 'completed',
-    name,
+    name: resolvedName,
+    ...(resolvedNamespace ? { namespace: resolvedNamespace } : {}),
     arguments: args,
     call_id: callId,
   };
@@ -95,7 +165,7 @@ function mapToolCallToOutput(tc: OpenAiChatToolCall): ResponsesOutputFunctionCal
     item.thought_signature = thoughtSignature;
   }
 
-  if (SHELL_TOOL_NAMES.has(name)) {
+  if (SHELL_TOOL_NAMES.has(resolvedName)) {
     item.type = 'local_shell_call';
     const parsed = safeJsonParse<{ command?: string[] }>(args);
     item.action = { type: 'exec', command: parsed?.command ?? [] };

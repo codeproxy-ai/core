@@ -36,6 +36,57 @@ export interface TranslateStreamOptions {
 
 const SHELL_TOOL_NAMES = new Set(['shell', 'container.exec', 'shell_command']);
 
+/** Build a shortName → namespace map so we can restore the namespace when an
+ *  upstream (e.g. DeepSeek) omits the "namespace." prefix in a tool-call.
+ *
+ *  Handles two formats that may appear in the tools list:
+ *  1. Flattened Chat Completions tools: { function: { name: "ns.tool" } }
+ *  2. Original Responses API namespace tools: { type: "namespace", name: "ns", tools: [...] }
+ */
+function buildShortNameToNamespace(tools: unknown[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const tool of tools) {
+    if (!tool || typeof tool !== 'object') {
+      continue;
+    }
+    // eslint-disable-next-line no-restricted-syntax -- Record extraction from unknown union
+    const entry = tool as Record<string, unknown>;
+
+    // Format 1: flattened Chat Completions tool with "namespace.name"
+    // eslint-disable-next-line no-restricted-syntax -- nested Record extraction
+    const fn = entry.function as Record<string, unknown> | undefined;
+    const flatName =
+      typeof fn?.name === 'string' ? fn.name : typeof entry.name === 'string' ? entry.name : '';
+    const dotIdx = flatName.indexOf('.');
+    if (dotIdx !== -1) {
+      map.set(flatName.slice(dotIdx + 1), flatName.slice(0, dotIdx));
+      continue;
+    }
+
+    // Format 2: Responses API namespace tool with nested sub-tools
+    if (
+      entry.type === 'namespace' &&
+      typeof entry.name === 'string' &&
+      Array.isArray(entry.tools)
+    ) {
+      const ns = entry.name;
+      // eslint-disable-next-line no-restricted-syntax -- unknown[] iteration over nested tools
+      for (const sub of entry.tools as unknown[]) {
+        if (!sub || typeof sub !== 'object') {
+          continue;
+        }
+        // eslint-disable-next-line no-restricted-syntax -- Record extraction from unknown
+        const subEntry = sub as Record<string, unknown>;
+        const subName = typeof subEntry.name === 'string' ? subEntry.name : '';
+        if (subName) {
+          map.set(subName, ns);
+        }
+      }
+    }
+  }
+  return map;
+}
+
 /**
  * Consume an OpenAI-chat-style SSE stream and yield Responses-API SSE events.
  */
@@ -96,6 +147,10 @@ class StreamTranslator {
   private textBuffer = '';
 
   private readonly toolCalls = new Map<string, ToolCallState>();
+  // shortName → namespace reverse map built from flattened namespace tools in
+  // the translated request.  Used to restore the namespace when an upstream
+  // (e.g. DeepSeek) omits the "namespace." prefix in its tool-call response.
+  private readonly shortNameToNamespace: Map<string, string>;
 
   private inputTokens = 0;
   private outputTokens = 0;
@@ -106,6 +161,7 @@ class StreamTranslator {
     this.responseId = options.responseId ?? makeId('resp');
     this.createdAt = options.createdAt ?? Math.floor(Date.now() / 1000);
     this.metadata = options.requestMetadata ?? {};
+    this.shortNameToNamespace = buildShortNameToNamespace(this.metadata.tools ?? []);
   }
 
   createInitialEvent(): ResponsesStreamEvent {
@@ -238,6 +294,22 @@ class StreamTranslator {
     for (const state of this.toolCalls.values()) {
       const item = state.item;
       item.status = 'completed';
+      // Restore namespace so codex can route the call to the correct handler.
+      // Skip splitting if the full name is already a known shell tool (e.g. "container.exec").
+      // Case 1: upstream preserved the prefix  → split on first dot.
+      // Case 2: upstream stripped the prefix   → look up the reverse map.
+      if (item.name && !SHELL_TOOL_NAMES.has(item.name)) {
+        const dotIdx = item.name.indexOf('.');
+        if (dotIdx !== -1) {
+          item.namespace = item.name.slice(0, dotIdx);
+          item.name = item.name.slice(dotIdx + 1);
+        } else {
+          const ns = this.shortNameToNamespace.get(item.name);
+          if (ns) {
+            item.namespace = ns;
+          }
+        }
+      }
       if (item.name && SHELL_TOOL_NAMES.has(item.name)) {
         item.type = 'local_shell_call';
         const parsed = safeJsonParse<{ command?: string[] }>(item.arguments ?? '');
