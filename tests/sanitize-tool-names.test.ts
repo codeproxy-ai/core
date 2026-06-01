@@ -730,14 +730,24 @@ describe('restoreToolNamesInChatResponse', () => {
 describe('createToolNameRestoreStream', () => {
   it('returns original stream when map is empty', () => {
     const enc = new TextEncoder();
-    const original = new ReadableStream({ start(c) { c.enqueue(enc.encode('data')); c.close(); } });
+    const original = new ReadableStream({
+      start(c) {
+        c.enqueue(enc.encode('data'));
+        c.close();
+      },
+    });
     expect(createToolNameRestoreStream(original, new Map())).toBe(original);
   });
 
   it('cancel does not throw', async () => {
     const enc = new TextEncoder();
     const map = new Map([['a_b', 'a.b']]);
-    const stream = new ReadableStream({ start(c) { c.enqueue(enc.encode('{"name":"a_b"}')); c.close(); } });
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(enc.encode('{"name":"a_b"}'));
+        c.close();
+      },
+    });
     const restored = createToolNameRestoreStream(stream, map);
     const reader = restored.getReader();
     await reader.cancel();
