@@ -15,9 +15,15 @@ import type {
   ResponsesRequest,
   ResponsesStreamEvent,
   ResponsesResponse,
+  ResponsesTool,
 } from './types/responses.js';
 import type { AnthropicResponse, AnthropicThinkingConfig } from './types/anthropic.js';
 import type { OpenAiChatResponse } from './types/openai_chat.js';
+import {
+  sanitizeUpstreamToolNames,
+  restoreToolNamesInChatResponse,
+  createToolNameRestoreStream,
+} from './tool-name-sanitizer.js';
 
 export type UpstreamFormat = 'anthropic' | 'openai-chat';
 
@@ -46,6 +52,10 @@ export interface CreateResponsesFetchOptions {
   passthroughFetch?: typeof fetch;
   /** Drop image/file parts from user messages (e.g. DeepSeek text-only models). */
   dropImages?: boolean;
+  /** Drop tools from the request before translation. Return true to drop a tool.
+   *  Use to reduce payload size when the upstream has a limit (e.g. DeepSeek ECONNRESET
+   *  on 252 KB requests with 143 tools). Applied before namespace flattening. */
+  dropTools?: (tool: ResponsesTool) => boolean;
   /** Fallback thought signature for Gemini OpenAI-compatible tool histories. */
   fallbackThoughtSignature?: string;
   /** Optional callback to receive cache statistics. */
@@ -305,6 +315,11 @@ async function handleResponses(
     console.warn(`[fallback] last user message has image, routing to ${fb.baseUrl}${fbModel}`);
   }
 
+  if (options.dropTools && request.tools) {
+    const { dropTools } = options;
+    request = { ...request, tools: request.tools.filter((tool) => !dropTools(tool)) };
+  }
+
   const streaming = request.stream ?? false;
   const resolvedUrl = normalizeBaseUrl(options.baseUrl, format);
   const { upstreamBody, requestMetadata } = buildUpstreamBody(
@@ -318,6 +333,14 @@ async function handleResponses(
     options.fallbackThoughtSignature,
   );
   const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
+
+  // Sanitize tool names: replace chars outside [a-zA-Z0-9_-] (e.g. dots) with '_'
+  // and restore originals in the response so callers see the original names.
+  const toolNameMap =
+    format === 'openai-chat'
+      ? // eslint-disable-next-line no-restricted-syntax -- upstreamBody is unknown; cast to Record for tool mutation
+        sanitizeUpstreamToolNames(upstreamBody as Record<string, unknown>)
+      : new Map<string, string>();
 
   const upstream = await baseFetch(resolvedUrl, {
     method: 'POST',
@@ -334,13 +357,20 @@ async function handleResponses(
   }
 
   if (!streaming) {
-    const body = await upstream.json();
+    const rawBody = await upstream.json();
+    const restoredBody = restoreToolNamesInChatResponse(
+      // eslint-disable-next-line no-restricted-syntax -- upstream json() returns unknown; cast to Record for tool name restoration
+      rawBody as Record<string, unknown>,
+      toolNameMap,
+    );
     const translated =
       format === 'anthropic'
         ? // eslint-disable-next-line no-restricted-syntax -- union type narrowing requires type assertion
-          anthropic.translateResponse(body as AnthropicResponse, { model: request.model })
+          anthropic.translateResponse(restoredBody as unknown as AnthropicResponse, {
+            model: request.model,
+          })
         : // eslint-disable-next-line no-restricted-syntax -- union type narrowing requires type assertion
-          openai.translateResponse(body as OpenAiChatResponse, {
+          openai.translateResponse(restoredBody as unknown as OpenAiChatResponse, {
             model: request.model,
             requestTools: request.tools ?? [],
           });
@@ -355,10 +385,12 @@ async function handleResponses(
     return jsonErrorResponse(502, 'Upstream streaming response has no body');
   }
 
+  const upstreamBodyStream = createToolNameRestoreStream(upstream.body, toolNameMap);
+
   const events =
     format === 'anthropic'
-      ? anthropic.translateStream(upstream.body, { model: request.model, requestMetadata })
-      : openai.translateStream(upstream.body, { model: request.model, requestMetadata });
+      ? anthropic.translateStream(upstreamBodyStream, { model: request.model, requestMetadata })
+      : openai.translateStream(upstreamBodyStream, { model: request.model, requestMetadata });
 
   return new Response(
     responsesEventsToSseStream(collectCacheStatsFromStream(events, options.onCacheStats)),
