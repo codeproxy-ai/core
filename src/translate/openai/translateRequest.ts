@@ -224,34 +224,11 @@ function processInputItem(
               contentBlocks.push({ type: 'text', text: String(contentPart.text ?? '') });
             } else if (contentPart.type === 'reasoning_text') {
               reasoningContent += String(contentPart.text ?? '');
-            } else if (
-              contentPart.type === 'input_image' ||
-              contentPart.type === 'image' ||
-              contentPart.type === 'image_url'
-            ) {
+            } else if (isImagePart(contentPart)) {
               if (options.dropImages) {
                 continue;
               }
-              let url = '';
-              const partWithImage: { image_url?: string | { url: string } } = part;
-              const imgUrl = partWithImage.image_url;
-              if (typeof imgUrl === 'string') {
-                url = imgUrl;
-              } else if (imgUrl && typeof imgUrl === 'object' && imgUrl.url) {
-                url = imgUrl.url;
-              } else {
-                const partWithData: { data?: string; base64?: string } = part;
-                const imgData = String(partWithData.data ?? partWithData.base64 ?? '');
-                if (imgData) {
-                  const partWithMime: { mime_type?: string; media_type?: string } = part;
-                  const mimeType = String(
-                    partWithMime.mime_type ?? partWithMime.media_type ?? 'image/png',
-                  );
-                  url = imgData.startsWith('data:')
-                    ? imgData
-                    : `data:${mimeType};base64,${imgData}`;
-                }
-              }
+              const url = imagePartToUrl(part);
               if (url) {
                 contentBlocks.push({ type: 'image_url', image_url: { url } });
               }
@@ -333,7 +310,7 @@ function processInputItem(
     itemType === 'fileChangeOutput' ||
     itemType === 'custom_tool_call_output'
   ) {
-    processToolOutput(item, messages);
+    processToolOutput(item, messages, options);
     return;
   }
 }
@@ -418,11 +395,45 @@ function processToolCall(
   void messages;
 }
 
-function processToolOutput(item: Record<string, unknown>, messages: OpenAiChatMessage[]): void {
+function isImagePart(part: { type?: string }): boolean {
+  return part.type === 'input_image' || part.type === 'image' || part.type === 'image_url';
+}
+
+// Extract a chat `image_url` value (http(s) URL or data: URI) from a Responses
+// image part. Shared by user-message and tool-output handling so both translate
+// images identically.
+function imagePartToUrl(part: {
+  image_url?: string | { url?: string };
+  data?: string;
+  base64?: string;
+  mime_type?: string;
+  media_type?: string;
+}): string {
+  const imgUrl = part.image_url;
+  if (typeof imgUrl === 'string') {
+    return imgUrl;
+  }
+  if (imgUrl && typeof imgUrl === 'object' && imgUrl.url) {
+    return imgUrl.url;
+  }
+  const imgData = String(part.data ?? part.base64 ?? '');
+  if (imgData) {
+    const mimeType = String(part.mime_type ?? part.media_type ?? 'image/png');
+    return imgData.startsWith('data:') ? imgData : `data:${mimeType};base64,${imgData}`;
+  }
+  return '';
+}
+
+function processToolOutput(
+  item: Record<string, unknown>,
+  messages: OpenAiChatMessage[],
+  options: TranslateRequestOptions,
+): void {
   const callId: string | undefined = item.call_id === undefined ? undefined : String(item.call_id);
   const outputRaw = item.output ?? item.content ?? item.stdout ?? '';
 
   let content = '';
+  const imageBlocks: Array<{ type: 'image_url'; image_url: { url: string } }> = [];
   if (typeof outputRaw === 'string') {
     content = outputRaw;
   } else if (Array.isArray(outputRaw)) {
@@ -433,6 +444,11 @@ function processToolOutput(item: Record<string, unknown>, messages: OpenAiChatMe
         const partItem: { type?: string; text?: string } = part;
         if (partItem.type === 'input_text' || partItem.type === 'text') {
           content += String(partItem.text ?? '');
+        } else if (!options.dropImages && isImagePart(partItem)) {
+          const url = imagePartToUrl(part);
+          if (url) {
+            imageBlocks.push({ type: 'image_url', image_url: { url } });
+          }
         }
       }
     }
@@ -454,6 +470,20 @@ function processToolOutput(item: Record<string, unknown>, messages: OpenAiChatMe
     tool_call_id: callId,
     content,
   });
+
+  // A chat `tool` message cannot carry images, so image parts in a tool output
+  // (e.g. codex `view_image` screenshots) would be dropped on translation. Lift
+  // them into a following `user` message — user messages DO map to chat
+  // `image_url` content, so the upstream model can still see them.
+  if (imageBlocks.length > 0) {
+    messages.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: '[Image output returned by the preceding tool call]' },
+        ...imageBlocks,
+      ],
+    });
+  }
 }
 
 // ==============================================================================
