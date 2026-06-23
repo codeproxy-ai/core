@@ -233,21 +233,22 @@ function processInputItem(
                 contentBlocks.push({ type: 'image_url', image_url: { url } });
               }
             } else if (part.type === 'input_file' || part.type === 'file') {
-              const partFile: {
-                file_data?: string;
-                data?: string;
-                mime_type?: string;
-                media_type?: string;
-              } = part;
-              const fileData = String(partFile.file_data ?? partFile.data ?? '');
+              const fileData = String(contentPart.file_data ?? contentPart.data ?? '');
               const mimeType = String(
-                partFile.mime_type ?? partFile.media_type ?? 'application/pdf',
+                contentPart.mime_type ?? contentPart.media_type ?? 'application/pdf',
               );
               if (fileData) {
                 const url = fileData.startsWith('data:')
                   ? fileData
                   : `data:${mimeType};base64,${fileData}`;
                 contentBlocks.push({ type: 'image_url', image_url: { url } });
+              }
+            } else if (contentPart.type === 'input_audio') {
+              const ia = contentPart.input_audio; // song audio (base64 / gs:// on Vertex)
+              const data = String(ia?.data ?? contentPart.data ?? '');
+              const format = String(ia?.format ?? contentPart.format ?? 'mp3');
+              if (data) {
+                contentBlocks.push({ type: 'input_audio', input_audio: { data, format } });
               }
             }
           }

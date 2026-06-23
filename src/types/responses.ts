@@ -34,6 +34,7 @@ export interface ResponsesContentPart {
     | 'image_url'
     | 'input_file'
     | 'file'
+    | 'input_audio'
     | 'tool_result'
     | string;
   text?: string;
@@ -45,6 +46,8 @@ export interface ResponsesContentPart {
   mime_type?: string;
   file_data?: string;
   file_url?: string | { url: string };
+  input_audio?: { data?: string; format?: string };
+  format?: string;
   tool_use_id?: string;
   call_id?: string;
   content?: unknown;
