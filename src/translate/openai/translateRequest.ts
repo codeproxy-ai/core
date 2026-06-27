@@ -18,6 +18,7 @@ import type {
 } from '../../types/openai_chat.js';
 import { makeId } from '../../utils/id.js';
 import { jsonStringifySafe } from '../../utils/json.js';
+import { applyGeminiFixups } from './gemini-fixups.js';
 
 export interface TranslateRequestOptions {
   /** Default max tokens when not provided. */
@@ -113,6 +114,10 @@ export function translateRequest(
   // Some upstreams (e.g. GLM) require tool messages to come right after the assistant
   // message that emitted the tool_calls, with no other message in between.
   repairToolMessageOrder(messages);
+
+  // Gemini (OpenAI-compat) needs extra fixups, gated on the model name (merge
+  // system messages; rewrite Codex's GPT-only multi_tool_use.parallel mandate).
+  applyGeminiFixups(messages, data.model);
 
   return { request };
 }
@@ -595,61 +600,63 @@ function repairToolMessageOrder(messages: OpenAiChatMessage[]): void {
     return;
   }
 
-  // Phase 1: group messages by assistant "block".  A block starts at an
-  // assistant message (possibly with tool_calls) and contains any subsequent
-  // non-assistant messages until the next assistant message.
-  interface Block {
-    assistant: OpenAiChatMessage;
-    trailing: OpenAiChatMessage[]; // user / tool / system messages after assistant
-  }
-
-  const blocks: Block[] = [];
-  let currentBlock: Block | null = null;
-
+  // Collect every tool message by tool_call_id. A response can drift far from
+  // its call — Codex interleaves user/assistant items between a function_call
+  // and its function_call_output, and parallel calls land out of order — so a
+  // tool response may sit in a different assistant "block" than its call.
+  // Block-local reordering can't fix that; we re-home each response globally.
+  const toolById = new Map<string, OpenAiChatMessage>();
   for (const msg of messages) {
-    if (msg.role === 'assistant') {
-      currentBlock = { assistant: msg, trailing: [] };
-      blocks.push(currentBlock);
-    } else if (currentBlock) {
-      currentBlock.trailing.push(msg);
-    } else {
-      // Message before any assistant (e.g. system) – keep as a standalone pseudo-block
-      blocks.push({ assistant: { role: 'assistant', content: null }, trailing: [msg] });
+    if (
+      msg.role === 'tool' &&
+      msg.tool_call_id !== undefined &&
+      !toolById.has(String(msg.tool_call_id))
+    ) {
+      toolById.set(String(msg.tool_call_id), msg);
     }
   }
 
-  // Phase 2: for each block, sort trailing messages so that tool messages
-  // whose tool_call_id matches one of the assistant's tool_calls come first.
-  for (const block of blocks) {
-    const toolCallIds = new Set(
-      (block.assistant.tool_calls ?? []).map((tc) => tc.id).filter(Boolean),
-    );
-    if (toolCallIds.size === 0) {
+  const used = new Set<string>();
+  const out: OpenAiChatMessage[] = [];
+  for (const msg of messages) {
+    // Tool messages are re-emitted right after their assistant below; skipping
+    // them at their original position also drops orphans (no matching call).
+    if (msg.role === 'tool') {
+      continue;
+    }
+    if (msg.role !== 'assistant') {
+      out.push(msg);
       continue;
     }
 
-    const tools: OpenAiChatMessage[] = [];
-    const others: OpenAiChatMessage[] = [];
-    for (const m of block.trailing) {
-      if (
-        m.role === 'tool' &&
-        m.tool_call_id !== undefined &&
-        toolCallIds.has(String(m.tool_call_id))
-      ) {
-        tools.push(m);
-      } else {
-        others.push(m);
+    const calls = msg.tool_calls ?? [];
+    if (calls.length === 0) {
+      // Keep assistants that carry content; drop empty placeholders.
+      if (msg.content != null || msg.reasoning_content != null) {
+        out.push(msg);
+      }
+      continue;
+    }
+
+    // Keep the assistant and ALL its tool_calls (a trailing call still awaiting
+    // execution is legitimate — never drop it), then pull each call's response,
+    // if present, to immediately follow in tool_calls order. This gives what
+    // providers like Gemini enforce per turn (a turn's functionCall count must
+    // equal the immediately-following functionResponse count). A genuinely
+    // orphaned tool_call (no response anywhere) is left as-is — de-duping the
+    // pairing is the caller's job, not this reorder's. Orphan tool messages
+    // (no matching call) are dropped by being skipped at their original spot.
+    out.push(msg);
+    for (const call of calls) {
+      const id = call.id ? String(call.id) : '';
+      const tool = id ? toolById.get(id) : undefined;
+      if (id && tool && !used.has(id)) {
+        out.push(tool);
+        used.add(id);
       }
     }
-    block.trailing = [...tools, ...others];
   }
 
-  // Phase 3: flatten back into messages array
   messages.length = 0;
-  for (const block of blocks) {
-    if (block.assistant.tool_calls || block.assistant.content != null) {
-      messages.push(block.assistant);
-    }
-    messages.push(...block.trailing);
-  }
+  messages.push(...out);
 }
