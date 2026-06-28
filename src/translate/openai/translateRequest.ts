@@ -643,9 +643,11 @@ function repairToolMessageOrder(messages: OpenAiChatMessage[]): void {
     // if present, to immediately follow in tool_calls order. This gives what
     // providers like Gemini enforce per turn (a turn's functionCall count must
     // equal the immediately-following functionResponse count). A genuinely
-    // orphaned tool_call (no response anywhere) is left as-is — de-duping the
-    // pairing is the caller's job, not this reorder's. Orphan tool messages
-    // (no matching call) are dropped by being skipped at their original spot.
+    // orphaned tool_call (no response anywhere) is left as-is here — this
+    // provider-agnostic reorder never invents responses; for Gemini, where an
+    // unpaired call is a hard 400, synthesizeMissingToolResponses (gemini-fixups,
+    // run right after) pairs it with a placeholder. Orphan tool messages (no
+    // matching call) are dropped by being skipped at their original spot.
     out.push(msg);
     for (const call of calls) {
       const id = call.id ? String(call.id) : '';

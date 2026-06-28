@@ -61,6 +61,64 @@ describe('repairToolMessageOrder (global, by tool_call_id)', () => {
   });
 });
 
+describe('Gemini orphan tool-call pairing (model-name gated)', () => {
+  const contiguousToolRespIds = (
+    messages: { role: string; tool_call_id?: string }[],
+    assistantIdx: number,
+  ): (string | undefined)[] => {
+    const ids: (string | undefined)[] = [];
+    for (let j = assistantIdx + 1; j < messages.length && messages[j].role === 'tool'; j += 1) {
+      ids.push(messages[j].tool_call_id);
+    }
+    return ids;
+  };
+
+  it('synthesizes a response for a trailing orphan call so the turn is paired', () => {
+    const { request } = translateRequest({
+      model: 'google/gemini-2.5-pro',
+      input: [call('A'), output('A'), call('B')],
+    });
+    const idx = request.messages.findIndex(
+      (m) => m.role === 'assistant' && (m.tool_calls ?? []).some((t) => t.id === 'B'),
+    );
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(request.messages[idx + 1]).toMatchObject({ role: 'tool', tool_call_id: 'B' });
+  });
+
+  it('pads only the unanswered calls in a partially-answered parallel batch', () => {
+    const { request } = translateRequest({
+      model: 'google/gemini-2.5-pro',
+      input: [call('A'), call('B'), call('C'), output('A')],
+    });
+    const idx = request.messages.findIndex(
+      (m) => m.role === 'assistant' && (m.tool_calls?.length ?? 0) === 3,
+    );
+    expect(request.messages[idx]?.tool_calls?.length).toBe(3);
+    // 1 real (A) + 2 synthetic (B, C) — one response per call, no duplicates.
+    expect(new Set(contiguousToolRespIds(request.messages, idx))).toEqual(new Set(['A', 'B', 'C']));
+  });
+
+  it('leaves a fully-answered batch untouched (no extra synthetic responses)', () => {
+    const { request } = translateRequest({
+      model: 'google/gemini-2.5-pro',
+      input: [call('A'), call('B'), output('A'), output('B')],
+    });
+    const idx = request.messages.findIndex(
+      (m) => m.role === 'assistant' && (m.tool_calls?.length ?? 0) === 2,
+    );
+    expect(contiguousToolRespIds(request.messages, idx)).toEqual(['A', 'B']);
+  });
+
+  it('does not synthesize for a non-Gemini model (orphan call left unpaired)', () => {
+    const { request } = translateRequest({
+      model: 'gpt-4',
+      input: [call('A'), output('A'), call('B')],
+    });
+    const toolIds = request.messages.filter((m) => m.role === 'tool').map((m) => m.tool_call_id);
+    expect(toolIds).toEqual(['A']);
+  });
+});
+
 describe('Gemini system-message merge (model-name gated)', () => {
   it('merges all system messages into one for a Gemini model', () => {
     const { request } = translateRequest({
