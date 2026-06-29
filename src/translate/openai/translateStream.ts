@@ -260,7 +260,20 @@ class StreamTranslator {
       }
     }
 
-    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
+    // Reasoning (thinking) text reaches us two ways:
+    //   - DeepSeek / GLM: a dedicated delta.reasoning_content field.
+    //   - Gemini OpenAI-compat: ordinary delta.content tagged
+    //     extra_content.google.thought === true (answer chunks carry a
+    //     thought_signature instead). Requires include_thoughts on the request.
+    // Both surface as a Responses reasoning item; only untagged content is the
+    // visible answer text.
+    const isThoughtContent = delta.extra_content?.google?.thought === true;
+    const reasoningDelta =
+      (typeof delta.reasoning_content === 'string' ? delta.reasoning_content : '') +
+      (isThoughtContent && typeof delta.content === 'string' ? delta.content : '');
+    const answerDelta = !isThoughtContent && typeof delta.content === 'string' ? delta.content : '';
+
+    if (reasoningDelta) {
       if (!this.reasoningItem) {
         const outputIndex = this.outputCounter++;
         this.reasoningItemIndex = outputIndex;
@@ -277,18 +290,18 @@ class StreamTranslator {
           item: this.reasoningItem,
         });
       }
-      this.reasoningBuffer += delta.reasoning_content;
+      this.reasoningBuffer += reasoningDelta;
       this.reasoningItem.content[0].text = this.reasoningBuffer;
       yield this.makeEvent('response.reasoning_text.delta', {
         response_id: this.responseId,
         item_id: this.reasoningItem.id,
         output_index: this.reasoningItemIndex,
         content_index: 0,
-        delta: delta.reasoning_content,
+        delta: reasoningDelta,
       });
     }
 
-    if (typeof delta.content === 'string' && delta.content) {
+    if (answerDelta) {
       if (!this.textItem) {
         const outputIndex = this.outputCounter++;
         this.textItemIndex = outputIndex;
@@ -305,7 +318,7 @@ class StreamTranslator {
           item: this.textItem,
         });
       }
-      this.textBuffer += delta.content;
+      this.textBuffer += answerDelta;
       // eslint-disable-next-line no-restricted-syntax -- Narrow union to text content
       const textContent = this.textItem.content[0] as { text: string };
       textContent.text = this.textBuffer;
@@ -314,7 +327,7 @@ class StreamTranslator {
         item_id: this.textItem.id,
         output_index: this.textItemIndex,
         content_index: 0,
-        delta: delta.content,
+        delta: answerDelta,
       });
     }
   }

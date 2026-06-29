@@ -9,6 +9,9 @@ export interface OpenAiChatToolCall {
   extra_content?: {
     google?: {
       thought_signature?: string;
+      // Gemini's OpenAI-compat tags chain-of-thought chunks with thought:true on
+      // the delta (the answer chunks carry a thought_signature instead).
+      thought?: boolean;
       [key: string]: unknown;
     };
     [key: string]: unknown;
@@ -122,6 +125,7 @@ export interface OpenAiChatStreamDelta {
   role?: string;
   content?: string;
   reasoning_content?: string;
+  extra_content?: OpenAiChatToolCall['extra_content'];
   tool_calls?: OpenAiChatStreamDeltaToolCall[];
   [key: string]: unknown;
 }

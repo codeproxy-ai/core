@@ -47,4 +47,45 @@ describe('openai translateStream - reasoning content', () => {
     const textDeltas = events.filter((e) => e.type === 'response.output_text.delta');
     expect(textDeltas.length).toBe(1);
   });
+
+  it('routes Gemini thought-tagged content (extra_content.google.thought) to reasoning', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(c) {
+        // Gemini streams thoughts as ordinary content tagged thought:true …
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"**Plan**","extra_content":{"google":{"thought":true}}}}]}\n\n',
+          ),
+        );
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"content":" the steps","extra_content":{"google":{"thought":true}}}}]}\n\n',
+          ),
+        );
+        // … then the answer chunk carries a thought_signature, NOT thought:true.
+        c.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"index":0,"delta":{"content":"391","extra_content":{"google":{"thought_signature":"sig"}}}}]}\n\n',
+          ),
+        );
+        c.enqueue(encoder.encode('data: [DONE]\n\n'));
+        c.close();
+      },
+    });
+    const events: ResponsesStreamEvent[] = [];
+    for await (const evt of translateStream(stream)) {
+      events.push(evt);
+    }
+
+    const reasoningDeltas = events.filter(
+      (e) => e.type === 'response.reasoning_text.delta',
+    ) as unknown as Array<{ delta: string }>;
+    expect(reasoningDeltas.map((e) => e.delta)).toEqual(['**Plan**', ' the steps']);
+
+    const textDeltas = events.filter(
+      (e) => e.type === 'response.output_text.delta',
+    ) as unknown as Array<{ delta: string }>;
+    expect(textDeltas.map((e) => e.delta)).toEqual(['391']);
+  });
 });

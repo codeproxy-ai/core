@@ -18,7 +18,7 @@ import type {
 } from '../../types/openai_chat.js';
 import { makeId } from '../../utils/id.js';
 import { jsonStringifySafe } from '../../utils/json.js';
-import { applyGeminiFixups } from './gemini-fixups.js';
+import { applyGeminiFixups, isGeminiModel } from './gemini-fixups.js';
 
 export interface TranslateRequestOptions {
   /** Default max tokens when not provided. */
@@ -79,7 +79,17 @@ export function translateRequest(
   const effort = typeof data.reasoning?.effort === 'string' ? data.reasoning.effort : undefined;
   if (effort) {
     const req: Record<string, unknown> = request;
-    req.reasoning_effort = effort;
+    if (isGeminiModel(data.model)) {
+      // Gemini's OpenAI-compat endpoint never returns thought text for a plain
+      // reasoning_effort (that only spends a thinking budget), and rejects
+      // reasoning_effort + thinking_config together with a hard 400. To actually
+      // surface chain-of-thought we request include_thoughts via google.thinking_config
+      // and drop reasoning_effort; thoughts then stream back as content chunks tagged
+      // extra_content.google.thought === true (decoded in translateStream).
+      req.google = { thinking_config: { include_thoughts: true } };
+    } else {
+      req.reasoning_effort = effort;
+    }
   }
 
   const maxTokens =
