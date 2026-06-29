@@ -19,9 +19,7 @@ describe('openai translateStream - reasoning content', () => {
           ),
         );
         c.enqueue(
-          encoder.encode(
-            'data: {"choices":[{"index":0,"delta":{"content":"answer"}}]}\n\n',
-          ),
+          encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"answer"}}]}\n\n'),
         );
         c.enqueue(encoder.encode('data: [DONE]\n\n'));
         c.close();
@@ -34,7 +32,7 @@ describe('openai translateStream - reasoning content', () => {
 
     const reasoningDeltas = events.filter(
       (e) => e.type === 'response.reasoning_text.delta',
-    ) as Array<{ delta: string }>;
+    ) as unknown as Array<{ delta: string }>;
     expect(reasoningDeltas.map((e) => e.delta)).toEqual(['let me think', ' harder']);
 
     // a reasoning output item was opened
