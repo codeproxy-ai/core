@@ -11,6 +11,7 @@ import type {
   ResponsesOutputFunctionCall,
   ResponsesOutputItem,
   ResponsesOutputMessage,
+  ResponsesOutputReasoning,
   ResponsesResponse,
   ResponsesStreamEvent,
 } from '../../types/responses.js';
@@ -146,6 +147,13 @@ class StreamTranslator {
   private textItemIndex = -1;
   private textBuffer = '';
 
+  // Reasoning (thinking) item — upstreams that expose chain-of-thought (DeepSeek,
+  // Gemini OpenAI-compat, …) stream it on delta.reasoning_content. Surface it as a
+  // Responses reasoning item so codex sees response.reasoning_text.delta.
+  private reasoningItem?: ResponsesOutputReasoning;
+  private reasoningItemIndex = -1;
+  private reasoningBuffer = '';
+
   private readonly toolCalls = new Map<string, ToolCallState>();
   // shortName → namespace reverse map built from flattened namespace tools in
   // the translated request.  Used to restore the namespace when an upstream
@@ -252,6 +260,37 @@ class StreamTranslator {
       }
     }
 
+    if (
+      typeof delta.reasoning_content === 'string' &&
+      delta.reasoning_content
+    ) {
+      if (!this.reasoningItem) {
+        const outputIndex = this.outputCounter++;
+        this.reasoningItemIndex = outputIndex;
+        this.reasoningItem = {
+          id: makeId('rs'),
+          type: 'reasoning',
+          summary: [],
+          content: [{ type: 'reasoning_text', text: '' }],
+          status: 'in_progress',
+        };
+        yield this.makeEvent('response.output_item.added', {
+          response_id: this.responseId,
+          output_index: outputIndex,
+          item: this.reasoningItem,
+        });
+      }
+      this.reasoningBuffer += delta.reasoning_content;
+      this.reasoningItem.content[0].text = this.reasoningBuffer;
+      yield this.makeEvent('response.reasoning_text.delta', {
+        response_id: this.responseId,
+        item_id: this.reasoningItem.id,
+        output_index: this.reasoningItemIndex,
+        content_index: 0,
+        delta: delta.reasoning_content,
+      });
+    }
+
     if (typeof delta.content === 'string' && delta.content) {
       if (!this.textItem) {
         const outputIndex = this.outputCounter++;
@@ -285,6 +324,11 @@ class StreamTranslator {
 
   *finalize(): Generator<ResponsesStreamEvent, void, void> {
     const items: { index: number; item: ResponsesOutputItem }[] = [];
+
+    if (this.reasoningItem) {
+      this.reasoningItem.status = 'completed';
+      items.push({ index: this.reasoningItemIndex, item: this.reasoningItem });
+    }
 
     if (this.textItem) {
       this.textItem.status = 'completed';
