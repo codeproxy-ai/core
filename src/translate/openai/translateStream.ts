@@ -260,10 +260,7 @@ class StreamTranslator {
       }
     }
 
-    if (
-      typeof delta.reasoning_content === 'string' &&
-      delta.reasoning_content
-    ) {
+    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) {
       if (!this.reasoningItem) {
         const outputIndex = this.outputCounter++;
         this.reasoningItemIndex = outputIndex;
