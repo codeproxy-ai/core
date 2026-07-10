@@ -18,6 +18,7 @@ import type {
 import { parseSseStream, type SseMessage } from '../../utils/sse.js';
 import { makeId } from '../../utils/id.js';
 import { safeJsonParse, jsonStringifySafe } from '../../utils/json.js';
+import { encodeCallIdWithSignature } from './thought-signature-tunnel.js';
 
 export interface ResponsesStreamMetadata {
   temperature?: number;
@@ -33,6 +34,10 @@ export interface TranslateStreamOptions {
   responseId?: string;
   createdAt?: number;
   requestMetadata?: ResponsesStreamMetadata;
+  /** Tunnel the Gemini thought signature through the function_call `call_id`
+   *  (append it after a sentinel) for clients that drop `thought_signature`.
+   *  translateRequest strips it back off. */
+  tunnelThoughtSignatureInCallId?: boolean;
 }
 
 const SHELL_TOOL_NAMES = new Set(['shell', 'container.exec', 'shell_command']);
@@ -159,6 +164,7 @@ class StreamTranslator {
   // the translated request.  Used to restore the namespace when an upstream
   // (e.g. DeepSeek) omits the "namespace." prefix in its tool-call response.
   private readonly shortNameToNamespace: Map<string, string>;
+  private readonly tunnelThoughtSignatureInCallId: boolean;
 
   private inputTokens = 0;
   private outputTokens = 0;
@@ -170,6 +176,7 @@ class StreamTranslator {
     this.createdAt = options.createdAt ?? Math.floor(Date.now() / 1000);
     this.metadata = options.requestMetadata ?? {};
     this.shortNameToNamespace = buildShortNameToNamespace(this.metadata.tools ?? []);
+    this.tunnelThoughtSignatureInCallId = options.tunnelThoughtSignatureInCallId ?? false;
   }
 
   createInitialEvent(): ResponsesStreamEvent {
@@ -368,6 +375,13 @@ class StreamTranslator {
         item.type = 'local_shell_call';
         const parsed = safeJsonParse<{ command?: string[] }>(item.arguments ?? '');
         item.action = { type: 'exec', command: parsed?.command ?? [] };
+      }
+      // Smuggle the signature through call_id for clients that drop
+      // thought_signature; the same item object feeds output_item.done AND
+      // response.completed, so encoding once covers both. Split back off in
+      // translateRequest.
+      if (this.tunnelThoughtSignatureInCallId && item.thought_signature && item.call_id) {
+        item.call_id = encodeCallIdWithSignature(item.call_id, item.thought_signature);
       }
       items.push({ index: state.outputIndex, item });
     }

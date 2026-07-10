@@ -6,6 +6,7 @@ import type {
 } from '../../types/responses.js';
 import { makeId } from '../../utils/id.js';
 import { safeJsonParse, jsonStringifySafe } from '../../utils/json.js';
+import { encodeCallIdWithSignature } from './thought-signature-tunnel.js';
 
 export interface TranslateResponseOptions {
   responseId?: string;
@@ -14,6 +15,10 @@ export interface TranslateResponseOptions {
   /** Chat Completions tool list from the translated request — used to recover
    *  namespace when the upstream omits the "namespace." prefix in a tool call. */
   requestTools?: unknown[];
+  /** Tunnel the Gemini thought signature through the function_call `call_id`
+   *  (append it after a sentinel) for clients that drop `thought_signature`.
+   *  translateRequest strips it back off. */
+  tunnelThoughtSignatureInCallId?: boolean;
 }
 
 const SHELL_TOOL_NAMES = new Set(['shell', 'container.exec', 'shell_command']);
@@ -80,7 +85,7 @@ export function translateResponse(
   const shortNameToNs = buildShortNameToNamespace(options.requestTools ?? []);
   if (message?.tool_calls?.length) {
     for (const tc of message.tool_calls) {
-      const item = mapToolCallToOutput(tc, shortNameToNs);
+      const item = mapToolCallToOutput(tc, shortNameToNs, options.tunnelThoughtSignatureInCallId);
       if (item) {
         output.push(item);
       }
@@ -124,6 +129,7 @@ export function translateResponse(
 function mapToolCallToOutput(
   tc: OpenAiChatToolCall,
   shortNameToNs?: Map<string, string>,
+  tunnelThoughtSignatureInCallId?: boolean,
 ): ResponsesOutputFunctionCall | undefined {
   const name = tc.function?.name;
   if (!name) {
@@ -163,6 +169,11 @@ function mapToolCallToOutput(
   const thoughtSignature = getThoughtSignature(tc);
   if (thoughtSignature) {
     item.thought_signature = thoughtSignature;
+    if (tunnelThoughtSignatureInCallId && item.call_id) {
+      // Smuggle the signature through call_id for clients that drop
+      // thought_signature; translateRequest splits it back off.
+      item.call_id = encodeCallIdWithSignature(item.call_id, thoughtSignature);
+    }
   }
 
   if (SHELL_TOOL_NAMES.has(resolvedName)) {

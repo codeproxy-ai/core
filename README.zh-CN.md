@@ -63,9 +63,12 @@ npm install @codeproxy/core
 | `timeoutMs` | `number` | 上游请求超时 |
 | `onCacheStats` | `(stats) => void` | 接收缓存使用统计 |
 | `fallbackThoughtSignature` | `string` | Gemini OpenAI 兼容工具调用历史的兜底 thought signature |
+| `tunnelThoughtSignatureInCallId` | `boolean` | 把 Gemini thought signature 编码进 function-call 的 `call_id`，让它在会丢弃 `thought_signature` 字段的客户端里存活 |
 | `fallbackUpstream` | `object` | 当 `dropImages: true` 且请求包含图片时，自动切换到该上游（如支持视觉的模型） |
 
 Gemini OpenAI 兼容工具调用会在 Responses function-call item 中保留 `thought_signature`。迁移旧历史时，如果历史里没有上游返回的 signature，可以传入 `fallbackThoughtSignature`，让下一次上游工具调用请求继续带上 `extra_content.google.thought_signature`。
+
+有些客户端（如 codex-ts，其协议镜像 codex-rs）在 function-call item 上只往返 `{ type, call_id, name, arguments }`，会丢掉上游返回的 `thought_signature`，导致 Gemini 跨轮次思维链断裂。开启 `tunnelThoughtSignatureInCallId` 后，会在响应侧把 signature 追加进 `call_id`（以 `~gts~` 分隔），并在下一次请求侧拆回——客户端只存一个不透明字符串、无需改动，最终发往上游的仍是干净的 `call_id`。请求与响应两侧的翻译需使用相同设置。
 
 ### 转换器
 

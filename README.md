@@ -63,9 +63,12 @@ Creates a `fetch` wrapper that translates Responses API traffic to the configure
 | `timeoutMs` | `number` | Upstream request timeout |
 | `onCacheStats` | `(stats) => void` | Receive cache usage stats |
 | `fallbackThoughtSignature` | `string` | Fallback Gemini thought signature for OpenAI-compatible tool call histories |
+| `tunnelThoughtSignatureInCallId` | `boolean` | Carry the Gemini thought signature inside the function-call `call_id` so it survives clients that drop the `thought_signature` field |
 | `fallbackUpstream` | `object` | When `dropImages: true` and the request contains images, automatically route to this upstream instead (e.g. a vision-capable model) |
 
 Gemini OpenAI-compatible tool calls preserve `thought_signature` through Responses function-call items. When migrating old histories that do not include a returned signature, pass `fallbackThoughtSignature` so the next upstream tool-call request can still include `extra_content.google.thought_signature`.
+
+Some clients (e.g. codex-ts, whose protocol mirrors codex-rs) only round-trip `{ type, call_id, name, arguments }` on function-call items and therefore drop the returned `thought_signature`, breaking Gemini's cross-turn thinking chain. Enable `tunnelThoughtSignatureInCallId` to append the signature to the `call_id` (after a `~gts~` sentinel) on the response and strip it back off on the next request — the client stores an opaque string and needs no changes, and the clean `call_id` is what reaches the upstream. Use the same setting on request and response translation.
 
 ### Translators
 

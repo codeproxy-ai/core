@@ -19,6 +19,8 @@ import type {
 import { makeId } from '../../utils/id.js';
 import { jsonStringifySafe } from '../../utils/json.js';
 import { applyGeminiFixups, isGeminiModel } from './gemini-fixups.js';
+import { isImagePart, imagePartToUrl } from './image-parts.js';
+import { decodeCallId } from './thought-signature-tunnel.js';
 
 export interface TranslateRequestOptions {
   /** Default max tokens when not provided. */
@@ -32,6 +34,10 @@ export interface TranslateRequestOptions {
   dropImages?: boolean;
   /** Fallback signature for Gemini OpenAI histories that lack returned signatures. */
   fallbackThoughtSignature?: string;
+  /** Recover a thought signature tunneled through the function_call `call_id`
+   *  (see translateResponse/translateStream) and restore the clean call_id sent
+   *  upstream. Must match the setting used when translating the response. */
+  tunnelThoughtSignatureInCallId?: boolean;
 }
 
 export interface TranslateRequestResult {
@@ -316,7 +322,7 @@ function processInputItem(
     itemType === 'custom_tool_call' ||
     itemType === 'web_search_call'
   ) {
-    processToolCall(item, messages, getLastAssistant, options.fallbackThoughtSignature);
+    processToolCall(item, messages, getLastAssistant, options);
     return;
   }
 
@@ -335,9 +341,15 @@ function processToolCall(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
   getLastAssistant: () => OpenAiChatMessage,
-  fallbackThoughtSignature?: string,
+  options: TranslateRequestOptions,
 ): void {
-  const callId: string = String(item.call_id ?? '') || String(item.id ?? '') || makeId('call');
+  const rawCallId: string = String(item.call_id ?? '') || String(item.id ?? '') || makeId('call');
+  // Recover a signature tunneled through call_id (opt-in) and restore the clean
+  // id sent upstream; a plain call_id passes through with no signature.
+  const decoded = options.tunnelThoughtSignatureInCallId
+    ? decodeCallId(rawCallId)
+    : { callId: rawCallId };
+  const callId = decoded.callId;
   let name: string | undefined = item.name === undefined ? undefined : String(item.name);
   const itemType: string | undefined = item.type === undefined ? undefined : String(item.type);
 
@@ -398,7 +410,8 @@ function processToolCall(
     function: { name, arguments: argsStr },
   };
 
-  const sig = item.thought_signature ?? fallbackThoughtSignature;
+  const sig =
+    decoded.thoughtSignature ?? item.thought_signature ?? options.fallbackThoughtSignature;
   const thought = item.thought;
   if (typeof sig === 'string' && sig) {
     toolCall.extra_content = { google: { thought_signature: sig } };
@@ -411,41 +424,19 @@ function processToolCall(
   void messages;
 }
 
-function isImagePart(part: { type?: string }): boolean {
-  return part.type === 'input_image' || part.type === 'image' || part.type === 'image_url';
-}
-
-// Extract a chat `image_url` value (http(s) URL or data: URI) from a Responses
-// image part. Shared by user-message and tool-output handling so both translate
-// images identically.
-function imagePartToUrl(part: {
-  image_url?: string | { url?: string };
-  data?: string;
-  base64?: string;
-  mime_type?: string;
-  media_type?: string;
-}): string {
-  const imgUrl = part.image_url;
-  if (typeof imgUrl === 'string') {
-    return imgUrl;
-  }
-  if (imgUrl && typeof imgUrl === 'object' && imgUrl.url) {
-    return imgUrl.url;
-  }
-  const imgData = String(part.data ?? part.base64 ?? '');
-  if (imgData) {
-    const mimeType = String(part.mime_type ?? part.media_type ?? 'image/png');
-    return imgData.startsWith('data:') ? imgData : `data:${mimeType};base64,${imgData}`;
-  }
-  return '';
-}
-
 function processToolOutput(
   item: Record<string, unknown>,
   messages: OpenAiChatMessage[],
   options: TranslateRequestOptions,
 ): void {
-  const callId: string | undefined = item.call_id === undefined ? undefined : String(item.call_id);
+  const rawCallId: string | undefined =
+    item.call_id === undefined ? undefined : String(item.call_id);
+  // Strip any tunneled signature suffix so this tool result's tool_call_id still
+  // matches the (cleaned) assistant tool_call id upstream.
+  const callId: string | undefined =
+    rawCallId !== undefined && options.tunnelThoughtSignatureInCallId
+      ? decodeCallId(rawCallId).callId
+      : rawCallId;
   const outputRaw = item.output ?? item.content ?? item.stdout ?? '';
 
   let content = '';

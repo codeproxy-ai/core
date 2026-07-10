@@ -58,6 +58,11 @@ export interface CreateResponsesFetchOptions {
   dropTools?: (tool: ResponsesTool) => boolean;
   /** Fallback thought signature for Gemini OpenAI-compatible tool histories. */
   fallbackThoughtSignature?: string;
+  /** Tunnel the Gemini thought signature through the function_call `call_id` so
+   *  it survives clients that drop the dedicated `thought_signature` field (e.g.
+   *  codex-ts, whose protocol mirrors codex-rs). Encoded on the response and
+   *  stripped back off on the next request. Off by default. */
+  tunnelThoughtSignatureInCallId?: boolean;
   /** Optional callback to receive cache statistics. */
   onCacheStats?: (stats: CacheStats) => void;
   /** Override reasoning_effort sent to the upstream model (OpenAI Chat / Anthropic). */
@@ -331,6 +336,7 @@ async function handleResponses(
     options.reasoning_effort,
     options.thinking,
     options.fallbackThoughtSignature,
+    options.tunnelThoughtSignatureInCallId,
   );
   const upstreamHeaders = buildUpstreamHeaders(format, options, incomingHeaders);
 
@@ -373,6 +379,7 @@ async function handleResponses(
           openai.translateResponse(restoredBody as unknown as OpenAiChatResponse, {
             model: request.model,
             requestTools: request.tools ?? [],
+            tunnelThoughtSignatureInCallId: options.tunnelThoughtSignatureInCallId,
           });
     options.onCacheStats?.(extractCacheStatsFromResponse(translated));
     return new Response(JSON.stringify(translated), {
@@ -390,7 +397,11 @@ async function handleResponses(
   const events =
     format === 'anthropic'
       ? anthropic.translateStream(upstreamBodyStream, { model: request.model, requestMetadata })
-      : openai.translateStream(upstreamBodyStream, { model: request.model, requestMetadata });
+      : openai.translateStream(upstreamBodyStream, {
+          model: request.model,
+          requestMetadata,
+          tunnelThoughtSignatureInCallId: options.tunnelThoughtSignatureInCallId,
+        });
 
   return new Response(
     responsesEventsToSseStream(collectCacheStatsFromStream(events, options.onCacheStats)),
@@ -427,6 +438,7 @@ function buildUpstreamBody(
   reasoning_effort?: string,
   thinking?: unknown,
   fallbackThoughtSignature?: string,
+  tunnelThoughtSignatureInCallId?: boolean,
 ): { upstreamBody: unknown; requestMetadata: ReturnType<typeof buildRequestMetadata> } {
   if (format === 'anthropic') {
     const { request: ar } = anthropic.translateRequest(request);
@@ -464,6 +476,7 @@ function buildUpstreamBody(
   const { request: cr } = openai.translateRequest(request, {
     dropImages: dropImages,
     fallbackThoughtSignature,
+    tunnelThoughtSignatureInCallId,
   });
   cr.stream = streaming;
   if (streaming) {
