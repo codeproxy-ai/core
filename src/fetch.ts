@@ -24,6 +24,12 @@ import {
   restoreToolNamesInChatResponse,
   createToolNameRestoreStream,
 } from './tool-name-sanitizer.js';
+import {
+  extractRequestBody,
+  extractRequestMeta,
+  isResponsesEndpoint,
+  urlOf,
+} from './utils/request.js';
 
 export type UpstreamFormat = 'anthropic' | 'openai-chat';
 
@@ -56,6 +62,13 @@ export interface CreateResponsesFetchOptions {
    *  Use to reduce payload size when the upstream has a limit (e.g. DeepSeek ECONNRESET
    *  on 252 KB requests with 143 tools). Applied before namespace flattening. */
   dropTools?: (tool: ResponsesTool) => boolean;
+  /** Reject /responses bodies longer than this many characters (≈ bytes for the
+   *  ASCII-dominant JSON these APIs exchange) with a 413 error envelope BEFORE
+   *  parse/translate. The translation pipeline (parse → translate → re-serialize)
+   *  holds several times the body size at peak, so on memory-capped runtimes
+   *  (e.g. 128 MB Cloudflare Workers isolates) one runaway request can OOM the
+   *  whole isolate and kill every concurrent request. Off by default. */
+  maxBodyChars?: number;
   /** Fallback thought signature for Gemini OpenAI-compatible tool histories. */
   fallbackThoughtSignature?: string;
   /** Tunnel the Gemini thought signature through the function_call `call_id` so
@@ -114,9 +127,30 @@ export function createResponsesFetch(options: CreateResponsesFetchOptions): type
       return passthrough(input, init);
     }
 
-    const { body, signal, method, headers } = await extractRequest(input, init);
+    // Decide the route from metadata alone (method/headers/signal) BEFORE touching
+    // the body: the non-POST passthrough must forward the original Request with its
+    // body unread, and the POST path reads the body exactly once without clone()
+    // (cloning forces the runtime to buffer a second copy of the whole body — a
+    // real cost for multi-MB agent contexts on memory-capped edge runtimes).
+    const { signal, method, headers } = extractRequestMeta(input, init);
     if (method !== 'POST') {
       return passthrough(input, init);
+    }
+    const body = await extractRequestBody(input, init);
+
+    if (
+      options.maxBodyChars !== undefined &&
+      body !== undefined &&
+      body.length > options.maxBodyChars
+    ) {
+      return jsonErrorResponse(
+        413,
+        `Request body is ${(body.length / 1024 / 1024).toFixed(1)}MB, exceeding the configured ` +
+          `${(options.maxBodyChars / 1024 / 1024).toFixed(1)}MB limit. The conversation context ` +
+          `(including inline media) has grown too large for this deployment — compact the ` +
+          `conversation or avoid inlining large media.`,
+        'invalid_request_error',
+      );
     }
 
     let parsed: ResponsesRequest | undefined;
@@ -203,91 +237,9 @@ function inferFormatFromModel(model: string | undefined): UpstreamFormat | null 
   return null;
 }
 
-// ── request extraction ──
-
-function isResponsesEndpoint(url: string): boolean {
-  // eslint-disable-next-line no-restricted-syntax -- try/catch needed for server-side HTTP error handling
-  try {
-    return /\/v1\/responses\/?$/.test(new URL(url, 'http://_internal_').pathname);
-  } catch {
-    return /\/v1\/responses(?:\?|$)/.test(url);
-  }
-}
 // ==============================================================================
-// Main Fetch Function
+// Main Handler
 // ==============================================================================
-
-function urlOf(input: RequestInfo | URL): string {
-  if (typeof input === 'string') {
-    return input;
-  }
-  if (input instanceof URL) {
-    return input.toString();
-  }
-  if (typeof Request !== 'undefined' && input instanceof Request) {
-    return input.url;
-  }
-  return String(input);
-}
-
-function parseHeaders(raw: HeadersInit | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!raw) {
-    return out;
-  }
-  if (typeof Headers !== 'undefined' && raw instanceof Headers) {
-    raw.forEach((val, key) => {
-      out[key.toLowerCase()] = val;
-    });
-    return out;
-  }
-  if (Array.isArray(raw)) {
-    for (const [k, v] of raw) {
-      out[String(k).toLowerCase()] = String(v);
-    }
-    return out;
-  }
-  for (const [k, v] of Object.entries(raw)) {
-    out[k.toLowerCase()] = String(v);
-  }
-  return out;
-}
-
-async function extractRequest(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<{
-  body: string | undefined;
-  signal: AbortSignal | undefined;
-  method: string;
-  headers: Record<string, string>;
-}> {
-  if (typeof Request !== 'undefined' && input instanceof Request) {
-    const text = await input.clone().text();
-    const headers: HeadersInit = parseHeaders(input.headers);
-    return { body: text || undefined, signal: input.signal, method: input.method, headers };
-  }
-  const method = init?.method?.toUpperCase() ?? 'GET';
-  const body =
-    init?.body != null
-      ? typeof init.body === 'string'
-        ? init.body
-        : await readBody(init.body)
-      : undefined;
-  return { body, signal: init?.signal, method, headers: parseHeaders(init?.headers) };
-}
-
-async function readBody(body: BodyInit): Promise<string> {
-  if (typeof body === 'string') {
-    return body;
-  }
-  if (body instanceof Uint8Array || body instanceof ArrayBuffer) {
-    return new TextDecoder().decode(body);
-  }
-  return String(body);
-}
-
-// ── main handler ──
 
 async function handleResponses(
   request: ResponsesRequest,
@@ -656,9 +608,9 @@ function lastUserMessageHasImage(request: ResponsesRequest): boolean {
 
 // ── error helpers ──
 
-function jsonErrorResponse(status: number, message: string): Response {
-  return new Response(
-    JSON.stringify({ error: { message, type: 'upstream_error', code: String(status) } }),
-    { status, headers: { 'content-type': 'application/json' } },
-  );
+function jsonErrorResponse(status: number, message: string, type = 'upstream_error'): Response {
+  return new Response(JSON.stringify({ error: { message, type, code: String(status) } }), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 }
