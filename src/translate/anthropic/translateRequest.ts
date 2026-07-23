@@ -118,6 +118,14 @@ export function translateRequest(
   const thinking = mapThinking(data, maxTokens, options.reasoningBudgets);
   if (thinking) {
     request.thinking = thinking;
+    // Adaptive models take thinking depth via output_config.effort, not a token
+    // budget. Carry the Responses reasoning.effort through so depth is preserved.
+    if (thinking.type === 'adaptive') {
+      const effort = normalizeAnthropicEffort(data.reasoning?.effort);
+      if (effort) {
+        request.output_config = { effort };
+      }
+    }
   }
 
   return { request, hasPromptCache };
@@ -499,6 +507,64 @@ function mapToolChoice(choice: ResponsesToolChoice): AnthropicToolChoice | undef
   return { type: 'auto' };
 }
 
+// ==============================================================================
+// Thinking & Effort
+// ==============================================================================
+
+/**
+ * Claude "adaptive-generation" models — Sonnet 5+, Opus 4.6+, and the
+ * Fable/Mythos 5 family — use `thinking: {type:'adaptive'}` and REJECT the
+ * legacy `{type:'enabled', budget_tokens}` with a 400. Older Claude models
+ * (Opus ≤4.5, Sonnet ≤4.5, every Haiku shipped so far) and non-Claude models
+ * keep the budget_tokens shape. On adaptive models, thinking depth is set by
+ * `output_config.effort`, not a token budget.
+ *
+ * Tolerant of provider prefixes (`anthropic/claude-…`, `us.anthropic.claude-…`)
+ * and of dated snapshots mis-captured as a version (`claude-3-5-sonnet-20241022`).
+ */
+export function isAdaptiveThinkingModel(model: string | undefined): boolean {
+  if (typeof model !== 'string' || !/claude/i.test(model)) {
+    return false;
+  }
+  const lower = model.toLowerCase();
+  if (/(fable|mythos)/.test(lower)) {
+    return true;
+  }
+  const match = /(opus|sonnet|haiku)[-/ ]?(\d+)(?:[-.](\d+))?/.exec(lower);
+  if (!match) {
+    return false;
+  }
+  const family = match[1];
+  const major = Number(match[2]);
+  let minor = match[3] === undefined ? 0 : Number(match[3]);
+  // A 3-digit-plus "version" is really a dated snapshot caught by the digit
+  // group (e.g. ...-20241022) — treat it as no version rather than a huge one.
+  if (major >= 100) {
+    return false;
+  }
+  if (minor >= 100) {
+    minor = 0;
+  }
+  if (family === 'opus' || family === 'sonnet') {
+    return major >= 5 || (major === 4 && minor >= 6);
+  }
+  // haiku: no adaptive-thinking generation has shipped (4.5 uses budget_tokens);
+  // treat a hypothetical 5+ as adaptive for forward-compat.
+  return major >= 5;
+}
+
+const ANTHROPIC_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
+/** Map a Responses `reasoning.effort` to an Anthropic `output_config.effort`
+ *  value, or undefined when there is no direct equivalent (e.g. 'minimal'). */
+export function normalizeAnthropicEffort(effort: string | undefined): string | undefined {
+  if (typeof effort !== 'string') {
+    return undefined;
+  }
+  const lower = effort.toLowerCase();
+  return ANTHROPIC_EFFORT_LEVELS.has(lower) ? lower : undefined;
+}
+
 function mapThinking(
   data: ResponsesRequest,
   maxTokens: number,
@@ -511,6 +577,11 @@ function mapThinking(
   const effort = reasoning.effort;
   if (!effort || effort === 'minimal') {
     return undefined;
+  }
+  // Adaptive-generation models reject budget_tokens; emit the adaptive shape.
+  // Depth is carried separately via output_config.effort (see translateRequest).
+  if (isAdaptiveThinkingModel(data.model)) {
+    return { type: 'adaptive' };
   }
   const budgets = { ...DEFAULT_REASONING_BUDGETS, ...overrides };
   const budget = budgets[effort] ?? DEFAULT_REASONING_BUDGETS.medium;

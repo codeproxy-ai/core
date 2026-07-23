@@ -1,5 +1,7 @@
 export {
   translateRequest,
+  isAdaptiveThinkingModel,
+  normalizeAnthropicEffort,
   type TranslateRequestOptions,
   type TranslateRequestResult,
 } from './translateRequest.js';

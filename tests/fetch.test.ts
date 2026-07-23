@@ -485,7 +485,7 @@ it('injects thinking:disabled for anthropic upstream when reasoning_effort is mi
         id: 'msg_1',
         type: 'message',
         role: 'assistant',
-        model: 'claude-sonnet-4-7',
+        model: 'claude-sonnet-4-5',
         content: [{ type: 'text', text: 'ok' }],
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
@@ -506,7 +506,7 @@ it('injects thinking:disabled for anthropic upstream when reasoning_effort is mi
   await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-5', input: 'hello' }),
   });
 
   const upstreamBody = JSON.parse(capturedBody);
@@ -522,7 +522,7 @@ it('injects thinking:enabled with budget for anthropic upstream when reasoning_e
         id: 'msg_2',
         type: 'message',
         role: 'assistant',
-        model: 'claude-sonnet-4-7',
+        model: 'claude-sonnet-4-5',
         content: [{ type: 'text', text: 'ok' }],
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
@@ -540,7 +540,7 @@ it('injects thinking:enabled with budget for anthropic upstream when reasoning_e
   await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-5', input: 'hello' }),
   });
 
   const upstreamBody = JSON.parse(capturedBody);
@@ -556,7 +556,7 @@ it('injects raw thinking config for anthropic upstream when thinking is provided
         id: 'msg_3',
         type: 'message',
         role: 'assistant',
-        model: 'claude-sonnet-4-7',
+        model: 'claude-sonnet-4-5',
         content: [{ type: 'text', text: 'ok' }],
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
@@ -575,7 +575,7 @@ it('injects raw thinking config for anthropic upstream when thinking is provided
   await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-5', input: 'hello' }),
   });
 
   const upstreamBody = JSON.parse(capturedBody);
@@ -978,7 +978,7 @@ describe('fallback upstream', () => {
           id: 'msg_fb',
           type: 'message',
           role: 'assistant',
-          model: 'claude-sonnet-4-7',
+          model: 'claude-sonnet-4-5',
           content: [{ type: 'text', text: 'ok' }],
           usage: { input_tokens: 1, output_tokens: 1 },
         }),
@@ -1001,7 +1001,7 @@ describe('fallback upstream', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-7',
+        model: 'claude-sonnet-4-5',
         input: [
           {
             type: 'message',
@@ -1126,7 +1126,7 @@ it('fallback infers anthropic format from claude model name', async () => {
         id: 'msg_fb',
         type: 'message',
         role: 'assistant',
-        model: 'claude-sonnet-4-7',
+        model: 'claude-sonnet-4-5',
         content: [{ type: 'text', text: 'ok' }],
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
@@ -1141,7 +1141,7 @@ it('fallback infers anthropic format from claude model name', async () => {
     dropImages: true,
     fallbackUpstream: {
       baseUrl: 'https://api.anthropic.com/v1/messages',
-      model: 'claude-sonnet-4-7',
+      model: 'claude-sonnet-4-5',
     },
   });
 
@@ -1163,7 +1163,7 @@ it('fallback infers anthropic format from claude model name', async () => {
     }),
   });
 
-  // Should infer anthropic format from model name "claude-sonnet-4-7"
+  // Should infer anthropic format from model name "claude-sonnet-4-5"
   expect(capturedUrl).toBe('https://api.anthropic.com/v1/messages');
   expect(capturedUrl).not.toContain('/chat/completions');
 });
@@ -1177,7 +1177,7 @@ it('ensures max_tokens > thinking.budget_tokens for anthropic upstream', async (
         id: 'msg_mt',
         type: 'message',
         role: 'assistant',
-        model: 'claude-sonnet-4-7',
+        model: 'claude-sonnet-4-5',
         content: [{ type: 'text', text: 'ok' }],
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
@@ -1195,7 +1195,7 @@ it('ensures max_tokens > thinking.budget_tokens for anthropic upstream', async (
   await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello' }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-5', input: 'hello' }),
   });
 
   const upstreamBody = JSON.parse(capturedBody);
@@ -1211,7 +1211,7 @@ it('does not adjust max_tokens when already greater than thinking budget_tokens'
         id: 'msg_mt2',
         type: 'message',
         role: 'assistant',
-        model: 'claude-sonnet-4-7',
+        model: 'claude-sonnet-4-5',
         content: [{ type: 'text', text: 'ok' }],
         usage: { input_tokens: 1, output_tokens: 1 },
       }),
@@ -1229,7 +1229,7 @@ it('does not adjust max_tokens when already greater than thinking budget_tokens'
   await fetchImpl('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: 'Bearer test' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-7', input: 'hello', max_output_tokens: 8192 }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-5', input: 'hello', max_output_tokens: 8192 }),
   });
 
   const upstreamBody = JSON.parse(capturedBody);

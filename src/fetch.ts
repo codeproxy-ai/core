@@ -400,7 +400,20 @@ function buildUpstreamBody(
       ar.thinking = thinking as AnthropicThinkingConfig;
     } else if (reasoning_effort) {
       const effort = reasoning_effort.toLowerCase();
-      if (effort === 'minimal') {
+      if (anthropic.isAdaptiveThinkingModel(ar.model)) {
+        // Adaptive-generation models reject budget_tokens. minimal → leave
+        // thinking unset (off / model default); otherwise adaptive + effort.
+        if (effort === 'minimal') {
+          delete ar.thinking;
+          delete ar.output_config;
+        } else {
+          ar.thinking = { type: 'adaptive' };
+          const normalized = anthropic.normalizeAnthropicEffort(effort);
+          if (normalized) {
+            ar.output_config = { ...(ar.output_config ?? {}), effort: normalized };
+          }
+        }
+      } else if (effort === 'minimal') {
         ar.thinking = { type: 'disabled' };
       } else if (effort === 'low') {
         ar.thinking = { type: 'enabled', budget_tokens: 4096 };

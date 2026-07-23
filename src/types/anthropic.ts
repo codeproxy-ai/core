@@ -73,8 +73,17 @@ export type AnthropicToolChoice =
   | { type: 'tool'; name: string };
 
 export interface AnthropicThinkingConfig {
-  type: 'enabled' | 'disabled';
+  // 'adaptive' is the modern on-mode required by Claude 4.6+ / Sonnet 5 / Opus
+  // 4.7-4.8 / Fable 5 (these reject 'enabled' + budget_tokens with a 400).
+  // 'enabled' + budget_tokens remains for pre-4.6 models.
+  type: 'enabled' | 'disabled' | 'adaptive';
   budget_tokens?: number;
+}
+
+/** Anthropic `output_config` (subset). On adaptive-generation models, thinking
+ *  depth is controlled by `effort` here — NOT by a token budget on `thinking`. */
+export interface AnthropicOutputConfig {
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' | string;
 }
 
 export interface AnthropicRequest {
@@ -88,6 +97,7 @@ export interface AnthropicRequest {
   tool_choice?: AnthropicToolChoice;
   metadata?: Record<string, unknown>;
   thinking?: AnthropicThinkingConfig;
+  output_config?: AnthropicOutputConfig;
   stream?: boolean;
   [k: string]: unknown;
 }
