@@ -429,12 +429,52 @@ function mapInputToolCall(item: Record<string, unknown>): AnthropicToolUseBlock 
     return undefined;
   }
 
-  const args: Record<string, unknown> =
-    typeof item.arguments === 'object' && item.arguments !== null
-      ? // eslint-disable-next-line no-restricted-syntax -- TypeScript narrowing requires this cast
-        (item.arguments as Record<string, unknown>)
-      : {};
-  const input: Record<string, unknown> = args;
+  // The OpenAI Responses spec sends `function_call.arguments` as a JSON string,
+  // whereas Anthropic requires `tool_use.input` to be a JSON object. Parse the
+  // string form; pass an already-object form through unchanged; fall back to
+  // `{}` for anything that is not a plain object, so a corrupt history item can
+  // never emit a non-object `input` (Anthropic 400s on that).
+  let input: Record<string, unknown> = {};
+  const rawArgs = item.arguments;
+  if (typeof rawArgs === 'string') {
+    if (rawArgs.trim() === '') {
+      // Empty / whitespace-only is the ordinary no-argument call (equivalent to
+      // `"{}"`): forward `{}` silently — normal traffic, not a corrupt payload.
+      input = {};
+    } else {
+      let parsed: unknown;
+      let reason = '';
+      // eslint-disable-next-line no-restricted-syntax -- fail-open parse of untrusted history JSON
+      try {
+        parsed = JSON.parse(rawArgs);
+        if (parsed === null) {
+          reason = 'null';
+        } else if (Array.isArray(parsed)) {
+          reason = 'array';
+        } else if (typeof parsed !== 'object') {
+          reason = 'scalar';
+        }
+      } catch {
+        reason = 'parse-failed';
+      }
+      if (reason === '') {
+        // eslint-disable-next-line no-restricted-syntax -- narrowed to a plain object above
+        input = parsed as Record<string, unknown>;
+      } else {
+        // Diagnostics ONLY — never log the argument content. This library is
+        // published and its arguments routinely carry user prompts / creative
+        // content; the parse error message also embeds a payload fragment, so
+        // it is withheld too. Log just the tool name, a coarse reason, and the
+        // length.
+        console.warn(
+          `[anthropic] tool "${name}" arguments were not a JSON object (${reason}, length ${rawArgs.length}); input set to {}`,
+        );
+      }
+    }
+  } else if (rawArgs !== null && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
+    // eslint-disable-next-line no-restricted-syntax -- TypeScript narrowing requires this cast
+    input = rawArgs as Record<string, unknown>;
+  }
 
   const block: AnthropicToolUseBlock = {
     type: 'tool_use',
