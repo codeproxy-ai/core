@@ -86,6 +86,18 @@ interface BlockState {
 
 const SHELL_TOOL_NAMES = new Set(['shell', 'container.exec', 'shell_command']);
 
+// Anthropic stop_reason values that indicate the turn ended normally. Empty
+// no-argument tool_use arguments are only coerced to "{}" on one of these; on
+// any other reason (max_tokens, pause_turn, refusal,
+// model_context_window_exceeded) or an absent reason, the empty arguments
+// signal a truncated/incomplete call and are left as-is. Strict allowlist, never
+// a denylist — see design D2.
+const NORMAL_TERMINAL_STOP_REASONS = new Set(['tool_use', 'end_turn', 'stop_sequence']);
+
+// ==============================================================================
+// StreamTranslator
+// ==============================================================================
+
 class StreamTranslator {
   private readonly model: string;
   private readonly responseId: string;
@@ -193,6 +205,22 @@ class StreamTranslator {
       if (block.type === 'tool_use') {
         // eslint-disable-next-line no-restricted-syntax -- TypeScript narrowing requires this cast
         const call = block.item as ResponsesOutputFunctionCall;
+        // A no-argument tool call reaches finalize with empty (or whitespace-only)
+        // arguments: content_block_start's input:{} is treated as "no initial
+        // input" and the single input_json_delta carries an empty partial_json,
+        // which onContentBlockDelta drops. Coerce to "{}" so JSON.parse succeeds
+        // downstream — but ONLY on a normal-terminal stop reason. On max_tokens /
+        // any non-normal reason / an absent reason the empty arguments mean the
+        // call was truncated or the stream was cut, which must stay a visible
+        // parse error rather than silently execute with no arguments (design D2).
+        const args = call.arguments ?? '';
+        if (
+          (args === '' || args.trim() === '') &&
+          this.stopReason !== undefined &&
+          NORMAL_TERMINAL_STOP_REASONS.has(this.stopReason)
+        ) {
+          call.arguments = '{}';
+        }
         if (call.name && SHELL_TOOL_NAMES.has(call.name)) {
           call.type = 'local_shell_call';
           const parsed = safeJsonParse<{ command?: string[] }>(call.arguments ?? '');
