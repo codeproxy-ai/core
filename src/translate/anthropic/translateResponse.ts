@@ -14,6 +14,7 @@ import type {
 } from '../../types/responses.js';
 import { jsonStringifySafe } from '../../utils/json.js';
 import { makeId } from '../../utils/id.js';
+import { buildResponsesUsage } from './usage.js';
 
 export interface TranslateResponseOptions {
   responseId?: string;
@@ -40,15 +41,7 @@ export function translateResponse(
     model,
     status: 'completed',
     output,
-    usage: {
-      input_tokens: usage.input_tokens ?? 0,
-      output_tokens: usage.output_tokens ?? 0,
-      total_tokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
-      input_tokens_details: {
-        cached_tokens: usage.cache_read_input_tokens ?? 0,
-        cache_creation_tokens: usage.cache_creation_input_tokens ?? 0,
-      },
-    },
+    usage: buildResponsesUsage(usage),
   };
 }
 

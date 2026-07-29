@@ -43,7 +43,9 @@ describe('cache logging', () => {
     expect(capturedStats).toBeDefined();
     expect(capturedStats!.cachedTokens).toBe(75);
     expect(capturedStats!.cacheCreationTokens).toBe(25);
-    expect(capturedStats!.inputTokens).toBe(100);
+    // CacheStats.inputTokens mirrors the translated usage.input_tokens, which is the
+    // full prompt: 100 uncached + 75 cache read + 25 cache creation.
+    expect(capturedStats!.inputTokens).toBe(200);
     expect(capturedStats!.outputTokens).toBe(50);
   });
 
@@ -124,7 +126,9 @@ describe('cache logging', () => {
     expect(capturedStats).toBeDefined();
     expect(capturedStats!.cachedTokens).toBe(75);
     expect(capturedStats!.cacheCreationTokens).toBe(25);
-    expect(capturedStats!.inputTokens).toBe(100);
+    // CacheStats.inputTokens mirrors the translated usage.input_tokens, which is the
+    // full prompt: 100 uncached + 75 cache read + 25 cache creation.
+    expect(capturedStats!.inputTokens).toBe(200);
     expect(capturedStats!.outputTokens).toBe(50);
   });
 });
