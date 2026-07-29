@@ -14,6 +14,7 @@ import type {
 import { parseSseStream, type SseMessage } from '../../utils/sse.js';
 import { safeJsonParse, jsonStringifySafe } from '../../utils/json.js';
 import { makeId } from '../../utils/id.js';
+import { buildResponsesUsage } from './usage.js';
 
 export interface TranslateStreamOptions {
   model?: string;
@@ -241,7 +242,17 @@ class StreamTranslator {
     }
 
     const output = items.map((item) => item.item);
-    const total = this.inputTokens + this.outputTokens;
+    // The four accumulators mirror the wire faithfully: this.inputTokens is the
+    // Anthropic-native UNCACHED REMAINDER from message_start, disjoint from the two
+    // cache counters. Summing them into the Responses full-prompt `input_tokens`
+    // happens once, here at the edge — see buildResponsesUsage for why, and design
+    // D3 for why ingest deliberately does not pre-sum.
+    const usage = buildResponsesUsage({
+      input_tokens: this.inputTokens,
+      output_tokens: this.outputTokens,
+      cache_read_input_tokens: this.cacheReadTokens,
+      cache_creation_input_tokens: this.cacheCreationTokens,
+    });
 
     const response: Partial<ResponsesResponse> = {
       id: this.responseId,
@@ -258,15 +269,7 @@ class StreamTranslator {
       store: this.metadata.store ?? true,
       metadata: this.metadata.metadata ?? {},
       output,
-      usage: {
-        input_tokens: this.inputTokens,
-        output_tokens: this.outputTokens,
-        total_tokens: total,
-        input_tokens_details: {
-          cached_tokens: this.cacheReadTokens,
-          cache_creation_tokens: this.cacheCreationTokens,
-        },
-      },
+      usage,
     };
 
     yield this.makeEvent('response.completed', { response });
