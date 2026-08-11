@@ -617,6 +617,79 @@ it('does not inject reasoning_effort when not configured', async () => {
   expect(upstreamBody.thinking).toBeUndefined();
 });
 
+it('preserves non-/v1 base path prefixes when appending the endpoint', async () => {
+  const cases: Array<{ baseUrl: string; format: 'anthropic' | 'openai-chat'; expected: string }> = [
+    // codeproxy-ai/cli#6: --base-url https://api.domain.com/v2 must not collapse to /v1
+    {
+      baseUrl: 'https://api.domain.com/v2',
+      format: 'openai-chat',
+      expected: 'https://api.domain.com/v2/chat/completions',
+    },
+    {
+      baseUrl: 'https://gateway.example.com/anthropic',
+      format: 'anthropic',
+      expected: 'https://gateway.example.com/anthropic/messages',
+    },
+    // Bare origin still defaults to /v1
+    {
+      baseUrl: 'https://api.domain.com',
+      format: 'openai-chat',
+      expected: 'https://api.domain.com/v1/chat/completions',
+    },
+    {
+      baseUrl: 'https://api.domain.com',
+      format: 'anthropic',
+      expected: 'https://api.domain.com/v1/messages',
+    },
+    // Trailing slash must not produce a double slash
+    {
+      baseUrl: 'https://api.deepseek.com/v1/',
+      format: 'openai-chat',
+      expected: 'https://api.deepseek.com/v1/chat/completions',
+    },
+  ];
+
+  for (const { baseUrl, format, expected } of cases) {
+    let capturedUrl = '';
+    const upstream: typeof fetch = async (input) => {
+      capturedUrl = typeof input === 'string' ? input : input.toString();
+      const body =
+        format === 'anthropic'
+          ? {
+              id: 'msg',
+              type: 'message',
+              role: 'assistant',
+              model: 'm',
+              content: [{ type: 'text', text: 'ok' }],
+              usage: { input_tokens: 1, output_tokens: 1 },
+            }
+          : {
+              id: 'chatcmpl-1',
+              object: 'chat.completion',
+              created: 1,
+              model: 'm',
+              choices: [
+                { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+              ],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    const fetchImpl = createResponsesFetch({ upstreamFormat: format, baseUrl, fetch: upstream });
+    const res = await fetchImpl('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'any-model', input: 'hi' }),
+    });
+    expect(res.status).toBe(200);
+    expect(capturedUrl).toBe(expected);
+  }
+});
+
 describe('config headers', () => {
   it('merges root-level defaultHeaders into upstream request', async () => {
     let capturedHeaders: Record<string, string> = {};

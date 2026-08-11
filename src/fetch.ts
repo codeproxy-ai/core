@@ -178,24 +178,11 @@ function normalizeBaseUrl(url: string, format: UpstreamFormat): string {
   try {
     const parsedUrl = new URL(url);
     const path = parsedUrl.pathname.replace(/\/+$/, '');
-    if (format === 'anthropic') {
-      if (path.endsWith('/v1/messages') || path.endsWith('/messages')) {
-        return parsedUrl.toString();
-      }
-      if (path.endsWith('/v1')) {
-        parsedUrl.pathname += '/messages';
-        return parsedUrl.toString();
-      }
-      parsedUrl.pathname = '/v1/messages';
-    } else {
-      if (path.endsWith('/v1/chat/completions') || path.endsWith('/chat/completions')) {
-        return parsedUrl.toString();
-      }
-      if (path.endsWith('/v1')) {
-        parsedUrl.pathname += '/chat/completions';
-        return parsedUrl.toString();
-      }
-      parsedUrl.pathname = '/v1/chat/completions';
+    const endpoint = format === 'anthropic' ? '/messages' : '/chat/completions';
+    if (!path.endsWith(endpoint)) {
+      // Keep the caller's path prefix (e.g. /v2, /openai); default to /v1 only
+      // for a bare origin.
+      parsedUrl.pathname = (path || '/v1') + endpoint;
     }
     return parsedUrl.toString();
   } catch {
