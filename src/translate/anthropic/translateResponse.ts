@@ -14,6 +14,7 @@ import type {
 } from '../../types/responses.js';
 import { jsonStringifySafe } from '../../utils/json.js';
 import { makeId } from '../../utils/id.js';
+import { anthropicErrorInfo, isAnthropicErrorEnvelope } from './errorEnvelope.js';
 import { buildResponsesUsage } from './usage.js';
 
 export interface TranslateResponseOptions {
@@ -30,6 +31,23 @@ export function translateResponse(
   const createdAt = options.createdAt ?? Math.floor(Date.now() / 1000);
   const id = options.responseId ?? body.id ?? makeId('resp');
   const model = options.model ?? body.model ?? '';
+
+  // An error envelope has neither `content` nor `usage`, so the two `??`
+  // fallbacks below would turn it into a completed response with empty output
+  // and an all-zero usage report — a fabricated success. Report the failure
+  // instead (see errorEnvelope.ts for what that costs downstream).
+  if (isAnthropicErrorEnvelope(body)) {
+    const info = anthropicErrorInfo(body);
+    return {
+      id,
+      object: 'response',
+      created_at: createdAt,
+      model,
+      status: 'failed',
+      error: { code: info.type, message: info.message },
+      output: [],
+    };
+  }
 
   const output = mapOutputItems(body.content ?? []);
   const usage = body.usage ?? { input_tokens: 0, output_tokens: 0 };

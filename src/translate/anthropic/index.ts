@@ -5,6 +5,7 @@ export {
   type TranslateRequestOptions,
   type TranslateRequestResult,
 } from './translateRequest.js';
+export { anthropicErrorInfo, isAnthropicErrorEnvelope } from './errorEnvelope.js';
 export {
   translateResponse,
   mapOutputItems,

@@ -303,6 +303,20 @@ async function handleResponses(
 
   if (!streaming) {
     const rawBody = await upstream.json();
+    // A 2xx whose body is an Anthropic error envelope: the upstream failed and
+    // the status did not survive the hop (observed from gateways that swallow
+    // the upstream's own 4xx/5xx). Translating it would fabricate a completed
+    // response with empty output and zero usage — surface the failure instead,
+    // passing the original payload through so the caller keeps the upstream's
+    // wording (error classifiers key off it).
+    if (format === 'anthropic' && anthropic.isAnthropicErrorEnvelope(rawBody)) {
+      const { message } = anthropic.anthropicErrorInfo(rawBody);
+      console.warn(`[upstream] 2xx carrying an Anthropic error envelope: ${message}`);
+      return new Response(JSON.stringify(rawBody), {
+        status: 502,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
     const restoredBody = restoreToolNamesInChatResponse(
       // eslint-disable-next-line no-restricted-syntax -- upstream json() returns unknown; cast to Record for tool name restoration
       rawBody as Record<string, unknown>,
