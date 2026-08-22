@@ -1,6 +1,6 @@
 {
   "name": "@codeproxy/core",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Convert upstream LLM APIs (Chat Completions / Anthropic Messages) to OpenAI Responses API format. Zero dependencies, works in browser/Node/edge.",
   "keywords": [
     "openai",
