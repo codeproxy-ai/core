@@ -120,9 +120,25 @@ export interface AnthropicResponse {
   usage: AnthropicUsage;
 }
 
+// ==============================================================================
+// Failures and streaming events
+// ==============================================================================
+
+/**
+ * Request-level failure envelope. Anthropic sends it as the body of a non-2xx
+ * response AND as an `event: error` frame mid-stream; some gateways also return
+ * it under a 200. It carries no `content` and no `usage` — see
+ * translate/anthropic/errorEnvelope.ts for why that matters.
+ */
+export interface AnthropicErrorEnvelope {
+  type: 'error';
+  error: { type?: string; message?: string; [k: string]: unknown };
+}
+
 /** Anthropic streaming SSE events. */
 export type AnthropicStreamEvent =
   | { type: 'message_start'; message: AnthropicResponse }
+  | AnthropicErrorEnvelope
   | { type: 'content_block_start'; index: number; content_block: AnthropicContentBlock }
   | {
       type: 'content_block_delta';

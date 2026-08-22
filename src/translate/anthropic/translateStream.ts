@@ -2,7 +2,11 @@
 // Stream Translator
 // ==============================================================================
 
-import type { AnthropicStreamEvent, AnthropicContentBlock } from '../../types/anthropic.js';
+import type {
+  AnthropicStreamEvent,
+  AnthropicContentBlock,
+  AnthropicErrorEnvelope,
+} from '../../types/anthropic.js';
 import type {
   ResponsesOutputItem,
   ResponsesOutputFunctionCall,
@@ -14,6 +18,7 @@ import type {
 import { parseSseStream, type SseMessage } from '../../utils/sse.js';
 import { safeJsonParse, jsonStringifySafe } from '../../utils/json.js';
 import { makeId } from '../../utils/id.js';
+import { anthropicErrorInfo, isAnthropicErrorEnvelope } from './errorEnvelope.js';
 import { buildResponsesUsage } from './usage.js';
 
 export interface TranslateStreamOptions {
@@ -119,6 +124,18 @@ class StreamTranslator {
 
   private stopReason: string | undefined;
 
+  /** Set by an `event: error` frame; makes finalize() report a failure. */
+  private errorEnvelope: AnthropicErrorEnvelope | undefined;
+
+  /**
+   * Did the upstream emit ANY parseable event? Distinguishes "the upstream said
+   * nothing at all" (a dead/empty body behind a 200) from "the model answered
+   * but produced no content", which is a legitimate completed turn. Deliberately
+   * not keyed on `message_start`: a malformed-but-non-empty stream is still an
+   * answer, and failing it would change behavior for streams that work today.
+   */
+  private sawAnyEvent = false;
+
   constructor(options: TranslateStreamOptions) {
     this.model = options.model ?? '';
     this.responseId = options.responseId ?? makeId('resp');
@@ -146,6 +163,7 @@ class StreamTranslator {
   }
 
   *handleEvent(event: AnthropicStreamEvent): Generator<ResponsesStreamEvent, void, void> {
+    this.sawAnyEvent = true;
     switch (event.type) {
       case 'message_start': {
         // eslint-disable-next-line no-restricted-syntax -- TypeScript narrowing requires this cast
@@ -179,12 +197,41 @@ class StreamTranslator {
       case 'message_stop':
       case 'ping':
         return;
+      case 'error':
+        // Anthropic can fail a request MID-STREAM with an `event: error` frame.
+        // It used to fall into `default` and be dropped, after which finalize()
+        // emitted `response.completed` — turning an upstream failure into a
+        // fabricated success (see errorEnvelope.ts). Remember it; finalize()
+        // reports it as the single terminal event, so ordering is unchanged.
+        if (isAnthropicErrorEnvelope(event)) {
+          this.errorEnvelope ??= event;
+        }
+        return;
       default:
         return;
     }
   }
 
   *finalize(): Generator<ResponsesStreamEvent, void, void> {
+    // Two ways this stream did NOT succeed. Emitting `response.completed` for
+    // either one hands the caller a success carrying empty output and an
+    // all-zero usage report, which is indistinguishable from "the model said
+    // nothing" and silently corrupts any context accounting keyed off usage.
+    //   · an explicit mid-stream error frame;
+    //   · nothing at all — not one parseable event — which is what a gateway
+    //     returning 200 over a dead/empty upstream body looks like.
+    if (this.errorEnvelope) {
+      yield* this.failWith(anthropicErrorInfo(this.errorEnvelope));
+      return;
+    }
+    if (!this.sawAnyEvent) {
+      yield* this.failWith({
+        message: 'upstream stream ended without emitting any Anthropic event',
+        type: 'empty_upstream_stream',
+      });
+      return;
+    }
+
     const items: { index: number; item: ResponsesOutputItem }[] = [];
 
     if (this.textItem) {
@@ -273,6 +320,23 @@ class StreamTranslator {
     };
 
     yield this.makeEvent('response.completed', { response });
+  }
+
+  /** The single terminal event for a stream that failed. */
+  private *failWith(info: {
+    message: string;
+    type: string;
+  }): Generator<ResponsesStreamEvent, void, void> {
+    const response: Partial<ResponsesResponse> = {
+      id: this.responseId,
+      object: 'response',
+      created_at: this.createdAt,
+      model: this.model,
+      status: 'failed',
+      error: { code: info.type, message: info.message },
+      output: [],
+    };
+    yield this.makeEvent('response.failed', { response });
   }
 
   private onMessageStart(event: Extract<AnthropicStreamEvent, { type: 'message_start' }>): void {
